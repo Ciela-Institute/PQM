@@ -11,6 +11,7 @@ dynamic = [
 authors = [
   { name="Pablo Lemos", email="pablo.lemos@mila.quebec" },
   { name="Connor Stone", email="connor.stone@umontreal.ca" },
+  { name="Sammy Sharief", email="sharief2@illinois.edu" },
 ]
 description = "Implemenation of the PQMass two sample test from Lemos et al. 2024"
 readme = "README.md"
@@ -49,7 +50,7 @@ files = ["requirements.txt"]
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/caustics/_version.py"
+version-file = "src/pqm/_version.py"
 
 [tool.hatch.version.raw-options]
 local_scheme = "no-local-version"

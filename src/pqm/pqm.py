@@ -4,10 +4,10 @@ import numpy as np
 from scipy.stats import chi2_contingency
 from scipy.spatial import KDTree
 
-__all__ = "get_pqm_pvalue"
+__all__ = "pqm_pvalue"
 
 
-def get_pqm_pvalue(
+def pqm_pvalue(
     x_samples: np.ndarray,
     y_samples: np.ndarray,
     num_refs: int = 100,
@@ -33,9 +33,7 @@ def get_pqm_pvalue(
         pvalue. Null hypothesis that both samples are drawn from the same distribution.
     """
     if bootstrap is not None:
-        return list(
-            get_pqm_pvalue(x_samples, y_samples, num_refs=num_refs) for _ in range(bootstrap)
-        )
+        return list(pqm_pvalue(x_samples, y_samples, num_refs=num_refs) for _ in range(bootstrap))
     if len(y_samples) < num_refs:
         raise ValueError(
             "Number of reference samples must be less than the number of true samples."

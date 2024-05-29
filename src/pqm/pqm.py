@@ -51,15 +51,11 @@ def pqm_pvalue(
 
     tree = KDTree(refs)
 
-    counts_x = np.zeros(num_refs, dtype="int")
-    counts_y = np.zeros(num_refs, dtype="int")
-    for x in x_samples:
-        idx = tree.query(x.reshape(1, -1), k=1, workers=-1)[1][0]
-        counts_x[idx] += 1
+    idx = tree.query(x_samples, k=1, workers=-1)[1]
+    counts_x = np.bincount(idx, minlength=num_refs)
 
-    for y in y_samples:
-        idx = tree.query(y.reshape(1, -1), k=1, workers=-1)[1][0]
-        counts_y[idx] += 1
+    idx = tree.query(y_samples, k=1, workers=-1)[1]
+    counts_y = np.bincount(idx, minlength=num_refs)
 
     # Remove reference samples with no counts
     C = (counts_x > 0) | (counts_y > 0)

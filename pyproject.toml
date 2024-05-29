@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling", "hatch-requirements-txt", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pqm"
+dynamic = [
+        "dependencies",
+        "version"
+]
+authors = [
+  { name="Pablo Lemos", email="pablo.lemos@mila.quebec" },
+  { name="Connor Stone", email="connor.stone@umontreal.ca" },
+]
+description = "Implemenation of the PQMass two sample test from Lemos et al. 2024"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+keywords = [
+        "statistics",
+        "machine learning",
+        "pytorch"
+]
+classifiers=[
+        "Development Status :: 1 - Planning",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3"
+]
+
+[project.urls]
+Homepage = "https://github.com/Ciela-Institute/PQM"
+Documentation = "https://github.com/Ciela-Institute/PQM"
+Repository = "https://github.com/Ciela-Institute/PQM"
+Issues = "https://github.com/Ciela-Institute/PQM/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9",
+    "pytest-cov>=4.1,<5",
+    "pytest-mock>=3.12,<4",
+]
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/caustics/_version.py"
+
+[tool.hatch.version.raw-options]
+local_scheme = "no-local-version"

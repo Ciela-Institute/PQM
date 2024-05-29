@@ -29,7 +29,7 @@ print(np.mean(pvalues), np.std(pvalues))
 If your two samples are drawn from the same distribution then the pvalue should
 be drawn from the random uniform(0,1) distribution. This means that if you get a
 very small value (i.e. 1e-6) then you have failed the null hypothesis test and
-the two samples are not drawn form the same distribution.
+the two samples are not drawn from the same distribution.
 
 ## Developing
 

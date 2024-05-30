@@ -110,22 +110,17 @@ def pqm_chi2(
     N = N[N >= 0]
     refs, y_samples = y_samples[refs], y_samples[N]
 
-    counts_x = np.zeros(num_refs, dtype="int")
-    counts_y = np.zeros(num_refs, dtype="int")
-    for x in x_samples:
-        d = np.linalg.norm(x.reshape(1, -1) - refs, axis=-1)
-        idx = np.argmin(d)
-        counts_x[idx] += 1
+    tree = KDTree(refs)
 
-    for y in y_samples:
-        d = np.linalg.norm(y.reshape(1, -1) - refs, axis=-1)
-        idx = np.argmin(d)
-        counts_y[idx] += 1
+    idx = tree.query(x_samples, k=1, workers=-1)[1]
+    counts_x = np.bincount(idx, minlength=num_refs)
+
+    idx = tree.query(y_samples, k=1, workers=-1)[1]
+    counts_y = np.bincount(idx, minlength=num_refs)
 
     # Remove reference samples with no counts
     C = (counts_x > 0) | (counts_y > 0)
-    counts_x = counts_x[C]
-    counts_y = counts_y[C]
+    counts_x, counts_y = counts_x[C], counts_y[C]
 
     chi2_stat, _, _, _ = chi2_contingency(np.array([counts_x, counts_y]))
     return chi2_stat

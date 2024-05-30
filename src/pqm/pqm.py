@@ -12,7 +12,7 @@ def pqm_pvalue(
     y_samples: np.ndarray,
     num_refs: int = 100,
     bootstrap: Optional[int] = None,
-    whiten=True,
+    whiten: bool = False,
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples` are drawn form the same distribution.
@@ -27,6 +27,8 @@ def pqm_pvalue(
         Number of reference samples to use. Note that these will be drawn from y_samples, and then removed from the y_samples array.
     bootstrap : Optional[int]
         Number of bootstrap iterations to perform. No bootstrap if None (default).
+    whiten : bool
+        If True, whiten the samples by subtracting the mean and dividing by the standard deviation.
 
     Returns
     -------

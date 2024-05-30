@@ -2,6 +2,14 @@
 
 Implementation of the PQMass two sample test from Lemos et al. 2024 [here](https://arxiv.org/abs/2402.04355)
 
+## Install
+
+Just do:
+
+```
+pip install pqm
+```
+
 ## Usage
 
 ```python

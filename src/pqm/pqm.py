@@ -12,6 +12,7 @@ def pqm_pvalue(
     y_samples: np.ndarray,
     num_refs: int = 100,
     bootstrap: Optional[int] = None,
+    whiten=True,
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples` are drawn form the same distribution.
@@ -33,7 +34,10 @@ def pqm_pvalue(
         pvalue. Null hypothesis that both samples are drawn from the same distribution.
     """
     if bootstrap is not None:
-        return list(pqm_pvalue(x_samples, y_samples, num_refs=num_refs) for _ in range(bootstrap))
+        return list(
+            pqm_pvalue(x_samples.copy(), y_samples.copy(), num_refs=num_refs, whiten=whiten)
+            for _ in range(bootstrap)
+        )
     if len(y_samples) < num_refs:
         raise ValueError(
             "Number of reference samples must be less than the number of true samples."
@@ -42,6 +46,11 @@ def pqm_pvalue(
         print(
             "Warning: Number of y_samples is small (less than twice the number of reference samples). Result may have high variance."
         )
+    if whiten:
+        mean = np.mean(y_samples, axis=0)
+        std = np.std(y_samples, axis=0)
+        y_samples = (y_samples - mean) / std
+        x_samples = (x_samples - mean) / std
 
     refs = np.random.choice(len(y_samples), num_refs, replace=False)
     N = np.arange(len(y_samples))

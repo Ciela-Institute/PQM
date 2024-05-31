@@ -1,5 +1,5 @@
 import numpy as np
-from .pqm import pqm_pvalue
+from .pqm import pqm_pvalue, pqm_chi2
 
 
 def test():

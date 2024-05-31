@@ -1,7 +1,7 @@
 from typing import Optional
 
 import numpy as np
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, chi2
 from scipy.spatial import KDTree
 
 __all__ = ("pqm_chi2", "pqm_pvalue")
@@ -133,4 +133,9 @@ def pqm_chi2(
             for _ in range(bootstrap)
         ]
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten)
+    if dof != num_refs - 1:
+        # Rescale chi2 to new value which has the same cumulative probability
+        cp = chi2.cdf(chi2_stat, dof)
+        chi2_stat = chi2.ppf(cp, num_refs - 1)
+        dof = num_refs - 1
     return chi2_stat, dof

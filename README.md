@@ -10,14 +10,6 @@ Just do:
 pip install pqm
 ```
 
-## Install
-
-Just do:
-
-```
-pip install pqm
-```
-
 ## Usage
 
 This is the main use case:

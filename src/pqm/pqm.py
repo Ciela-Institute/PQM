@@ -1,10 +1,11 @@
 from typing import Optional
 
 import numpy as np
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, chi2
 from scipy.spatial import KDTree
 
 __all__ = ("pqm_chi2", "pqm_pvalue")
+
 
 def _pqm_test(x_samples: np.ndarray, y_samples: np.ndarray, num_refs: int):
     """
@@ -53,7 +54,13 @@ def _pqm_test(x_samples: np.ndarray, y_samples: np.ndarray, num_refs: int):
 
     return chi2_contingency(np.array([counts_x, counts_y]))
 
-def pqm_pvalue(x_samples: np.ndarray, y_samples: np.ndarray, num_refs: int = 100, bootstrap: Optional[int] = None):
+
+def pqm_pvalue(
+    x_samples: np.ndarray,
+    y_samples: np.ndarray,
+    num_refs: int = 100,
+    bootstrap: Optional[int] = None,
+):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples` are drawn form the same distribution.
 
@@ -78,7 +85,13 @@ def pqm_pvalue(x_samples: np.ndarray, y_samples: np.ndarray, num_refs: int = 100
     _, pvalue, _, _ = _pqm_test(x_samples, y_samples, num_refs)
     return pvalue
 
-def pqm_chi2(x_samples: np.ndarray, y_samples: np.ndarray, num_refs: int = 100, bootstrap: Optional[int] = None):
+
+def pqm_chi2(
+    x_samples: np.ndarray,
+    y_samples: np.ndarray,
+    num_refs: int = 100,
+    bootstrap: Optional[int] = None,
+):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples` are drawn form the same distribution.
 
@@ -101,4 +114,9 @@ def pqm_chi2(x_samples: np.ndarray, y_samples: np.ndarray, num_refs: int = 100, 
     if bootstrap is not None:
         return [pqm_chi2(x_samples, y_samples, num_refs=num_refs) for _ in range(bootstrap)]
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs)
+    if dof != num_refs - 1:
+        # Rescale chi2 to new value which has the same cumulative probability
+        cp = chi2.cdf(chi2_stat, dof)
+        chi2_stat = chi2.ppf(cp, num_refs - 1)
+        dof = num_refs - 1
     return chi2_stat, dof

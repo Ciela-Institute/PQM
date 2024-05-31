@@ -28,7 +28,7 @@ print(np.mean(pvalues), np.std(pvalues))
 # To get chi^2 from PQMass
 chi2_stat, dof = pqm_chi2(x_sample, y_sample, num_refs = 100, bootstrap = 50)
 print(np.mean(chi2_stat), np.std(chi2_stat))
-print(np.unqiue(dof)) # This should be the same as num_refs - 1, if it is not, we suggest you use pqm_pvalue
+print(np.unqiue(dof)) # This should be the same as DoF - 2, if it is not, we suggest you use pqm_pvalue
 ```
 
 If your two samples are drawn from the same distribution, then the p-value should

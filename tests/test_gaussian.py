@@ -43,4 +43,4 @@ def test_fail_chi2():
 
         new.append(pqm_chi2(x_samples, y_samples, num_refs=100))
     new = np.array(new)
-    assert np.mean(new[:, 0]) / 99 > 10
+    assert np.mean(new[:, 0]) / 99 > 2

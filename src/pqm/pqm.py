@@ -132,13 +132,9 @@ def pqm_chi2(
             pqm_chi2(x_samples, y_samples, num_refs=num_refs, whiten=whiten)
             for _ in range(bootstrap)
         ]
-    if bootstrap is not None:
-        return [pqm_chi2(x_samples, y_samples, num_refs=num_refs) for _ in range(bootstrap)]
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten)
     if dof != num_refs - 1:
         # Rescale chi2 to new value which has the same cumulative probability
-        cp = chi2.sf(chi2_stat, dof)
-        chi2_stat = chi2.isf(cp, num_refs - 1)
         if chi2_stat / dof < 10:
             cp = chi2.sf(chi2_stat, dof)
             chi2_stat = chi2.isf(cp, num_refs - 1)

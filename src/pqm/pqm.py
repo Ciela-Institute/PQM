@@ -135,7 +135,7 @@ def pqm_chi2(
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten)
     if dof != num_refs - 1:
         # Rescale chi2 to new value which has the same cumulative probability
-        cp = chi2.cdf(chi2_stat, dof, scale=chi2_stat)
-        chi2_stat = chi2.ppf(cp, num_refs - 1, scale=chi2_stat)
+        cp = chi2.sf(chi2_stat, dof)
+        chi2_stat = chi2.isf(cp, num_refs - 1)
         dof = num_refs - 1
     return chi2_stat, dof

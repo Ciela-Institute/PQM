@@ -1,5 +1,11 @@
 # PQMass: Probabilistic Assessment of the Quality of Generative Models using Probability Mass Estimation
 
+![PyPI - Version](https://img.shields.io/pypi/v/pqm?style=flat-square)
+[![CI](https://github.com/Ciela-Institute/PQM/actions/workflows/ci.yml/badge.svg)](https://github.com/Ciela-Institute/PQM/actions/workflows/ci.yml)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/pqm)
+[![arXiv](https://img.shields.io/badge/arXiv-2402.04355-b31b1b.svg)](https://arxiv.org/abs/2402.04355)
+
 Implementation of the PQMass two sample test from Lemos et al. 2024 [here](https://arxiv.org/abs/2402.04355)
 
 ## Install

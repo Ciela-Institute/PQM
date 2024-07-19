@@ -66,7 +66,7 @@ def pqm_pvalue(
     x_samples: np.ndarray,
     y_samples: np.ndarray,
     num_refs: int = 100,
-    bootstrap: Optional[int] = None,
+    re_tessellation: Optional[int] = None,
     whiten: bool = False,
 ):
     """
@@ -80,8 +80,8 @@ def pqm_pvalue(
         Samples from the second distribution, reference samples. Must have shape (M, *D) M is the number of y samples, and D is the dimensionality of the samples.
     num_refs : int
         Number of reference samples to use. Note that these will be drawn from y_samples, and then removed from the y_samples array.
-    bootstrap : Optional[int]
-        Number of bootstrap iterations to perform. No bootstrap if None (default).
+    re_tessellation : Optional[int]
+        Number of times pqm_pvalue is called, re tesselating the space. No re_tessellation if None (default).
     whiten : bool
         If True, whiten the samples by subtracting the mean and dividing by the standard deviation.
 
@@ -90,10 +90,10 @@ def pqm_pvalue(
     float or list
         pvalue(s). Null hypothesis that both samples are drawn from the same distribution.
     """
-    if bootstrap is not None:
+    if re_tessellation is not None:
         return [
             pqm_pvalue(x_samples, y_samples, num_refs=num_refs, whiten=whiten)
-            for _ in range(bootstrap)
+            for _ in range(re_tessellation)
         ]
     _, pvalue, _, _ = _pqm_test(x_samples, y_samples, num_refs, whiten)
     return pvalue
@@ -103,7 +103,7 @@ def pqm_chi2(
     x_samples: np.ndarray,
     y_samples: np.ndarray,
     num_refs: int = 100,
-    bootstrap: Optional[int] = None,
+    re_tessellation: Optional[int] = None,
     whiten: bool = False,
 ):
     """
@@ -117,8 +117,8 @@ def pqm_chi2(
         Samples from the second distribution, reference samples. Must have shape (M, *D) M is the number of y samples, and D is the dimensionality of the samples.
     num_refs : int
         Number of reference samples to use. Note that these will be drawn from y_samples, and then removed from the y_samples array.
-    bootstrap : Optional[int]
-        Number of bootstrap iterations to perform. No bootstrap if None (default).
+    re_tessellation : Optional[int]
+        Number of times pqm_chi2 is called, re tesselating the space. No re_tessellation if None (default).
     whiten : bool
         If True, whiten the samples by subtracting the mean and dividing by the standard deviation.
 
@@ -127,10 +127,10 @@ def pqm_chi2(
     float or list
         chi2 statistic(s) and degree(s) of freedom.
     """
-    if bootstrap is not None:
+    if re_tessellation is not None:
         return [
             pqm_chi2(x_samples, y_samples, num_refs=num_refs, whiten=whiten)
-            for _ in range(bootstrap)
+            for _ in range(re_tessellation)
         ]
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten)
     if dof != num_refs - 1:
@@ -141,4 +141,4 @@ def pqm_chi2(
         else:
             chi2_stat = chi2_stat * (num_refs - 1) / dof
         dof = num_refs - 1
-    return chi2_stat, dof
+    return chi2_stat

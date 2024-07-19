@@ -15,20 +15,19 @@ pip install pqm
 This is the main use case:
 
 ```python
-from pqm import pqm_pvalue
+from pqm import pqm_pvalue, pqm_chi2
 import numpy as np
 
 x_sample = np.random.normal(size = (500, 10))
 y_sample = np.random.normal(size = (400, 10))
 
 # To get pvalues from PQMass
-pvalues = pqm_pvalue(x_sample, y_sample, num_refs = 100, bootstrap = 50)
+pvalues = pqm_pvalue(x_sample, y_sample, num_refs = 100, re_tessellation = 50)
 print(np.mean(pvalues), np.std(pvalues))
 
 # To get chi^2 from PQMass
-chi2_stat, dof = pqm_chi2(x_sample, y_sample, num_refs = 100, bootstrap = 50)
+chi2_stat = pqm_chi2(x_sample, y_sample, num_refs = 100, re_tessellation = 50)
 print(np.mean(chi2_stat), np.std(chi2_stat))
-print(np.unqiue(dof)) # This should be the same as num_refs - 1, if it is not, we suggest you use pqm_pvalue
 ```
 
 If your two samples are drawn from the same distribution, then the p-value should
@@ -44,9 +43,6 @@ it suggests that the samples are out of distribution. Conversely, if the histogr
 to the left, it indicates potential duplication or memorization (particularly relevant 
 for generative models).
 
-Note that the chi^2 metric faces limitations if you have a few samples. A solution could
-be to use bootstrapping. Another such solution is to pqm_pvalue. We leave it to the user to 
-identify the best solution for their problem.
 
 ## Developing
 

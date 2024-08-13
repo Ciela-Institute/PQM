@@ -13,6 +13,7 @@ def _pqm_test(
     num_refs: int,
     whiten: bool,
     x_frac: Optional[float] = None,
+    gauss_frac: Optional[float] = None,
 ):
     """
     Helper function to perform the PQM test and return the results from
@@ -35,6 +36,11 @@ def _pqm_test(
         y_samples as reference samples. Ideally, ``x_frac = len(x_samples) /
         (len(x_samples) + len(y_samples))`` which is what is done for x_frac =
         None (default).
+    gauss_frac : float
+        Fraction of samples to take from gaussian distribution with mean/std
+        determined from the other reference samples. This ensures full support
+        of the reference samples if pathological behavior is expected.
+        Default: 0.0 no gaussian samples.
 
     Returns
     -------
@@ -59,9 +65,15 @@ def _pqm_test(
     if x_frac is None:
         x_frac = len(x_samples) / (len(x_samples) + len(y_samples))
 
+    # Determine fraction of samples to take from gaussian distribution
+    if gauss_frac is None:
+        gauss_frac = 0.0
+
     # Collect reference samples from x_samples
     if x_frac > 0:
-        xrefs = np.random.choice(len(x_samples), int(x_frac * num_refs), replace=False)
+        xrefs = np.random.choice(
+            len(x_samples), int(x_frac * (1.0 - gauss_frac) * num_refs), replace=False
+        )
         N = np.arange(len(x_samples))
         N[xrefs] = -1
         N = N[N >= 0]
@@ -71,7 +83,9 @@ def _pqm_test(
 
     # Collect reference samples from y_samples
     if x_frac < 1:
-        yrefs = np.random.choice(len(y_samples), int((1.0 - x_frac) * num_refs), replace=False)
+        yrefs = np.random.choice(
+            len(y_samples), int((1.0 - x_frac) * (1.0 - gauss_frac) * num_refs), replace=False
+        )
         N = np.arange(len(y_samples))
         N[yrefs] = -1
         N = N[N >= 0]
@@ -81,6 +95,15 @@ def _pqm_test(
 
     # Join the full set of reference samples
     refs = np.concatenate([xrefs, yrefs], axis=0)
+
+    # get gaussian reference points if requested
+    if gauss_frac > 0:
+        gauss_refs = np.random.normal(
+            loc=np.mean(refs, axis=0),
+            scale=np.std(refs, axis=0),
+            size=(int(gauss_frac * num_refs), *refs.shape[1:]),
+        )
+        refs = np.concatenate([refs, gauss_refs], axis=0)
 
     # Build KDtree to measure distances
     tree = KDTree(refs)
@@ -105,6 +128,7 @@ def pqm_pvalue(
     re_tessellation: Optional[int] = None,
     whiten: bool = False,
     x_frac: Optional[float] = None,
+    gauss_frac: Optional[float] = None,
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -144,10 +168,17 @@ def pqm_pvalue(
     """
     if re_tessellation is not None:
         return [
-            pqm_pvalue(x_samples, y_samples, num_refs=num_refs, whiten=whiten, x_frac=x_frac)
+            pqm_pvalue(
+                x_samples,
+                y_samples,
+                num_refs=num_refs,
+                whiten=whiten,
+                x_frac=x_frac,
+                gauss_frac=gauss_frac,
+            )
             for _ in range(re_tessellation)
         ]
-    _, pvalue, _, _ = _pqm_test(x_samples, y_samples, num_refs, whiten, x_frac)
+    _, pvalue, _, _ = _pqm_test(x_samples, y_samples, num_refs, whiten, x_frac, gauss_frac)
     return pvalue
 
 
@@ -158,6 +189,7 @@ def pqm_chi2(
     re_tessellation: Optional[int] = None,
     whiten: bool = False,
     x_frac: Optional[float] = None,
+    gauss_frac: Optional[float] = None,
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -196,10 +228,17 @@ def pqm_chi2(
     """
     if re_tessellation is not None:
         return [
-            pqm_chi2(x_samples, y_samples, num_refs=num_refs, whiten=whiten, x_frac=x_frac)
+            pqm_chi2(
+                x_samples,
+                y_samples,
+                num_refs=num_refs,
+                whiten=whiten,
+                x_frac=x_frac,
+                gauss_frac=gauss_frac,
+            )
             for _ in range(re_tessellation)
         ]
-    chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten, x_frac)
+    chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten, x_frac, gauss_frac)
     if dof != num_refs - 1:
         # Rescale chi2 to new value which has the same cumulative probability
         if chi2_stat / dof < 10:

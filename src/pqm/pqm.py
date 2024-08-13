@@ -13,7 +13,7 @@ def _pqm_test(
     num_refs: int,
     whiten: bool,
     x_frac: Optional[float] = None,
-    gauss_frac: Optional[float] = None,
+    gauss_frac: float = 0.0,
 ):
     """
     Helper function to perform the PQM test and return the results from
@@ -64,10 +64,6 @@ def _pqm_test(
     # Determine fraction of x_samples to use as reference samples
     if x_frac is None:
         x_frac = len(x_samples) / (len(x_samples) + len(y_samples))
-
-    # Determine fraction of samples to take from gaussian distribution
-    if gauss_frac is None:
-        gauss_frac = 0.0
 
     # Collect reference samples from x_samples
     if x_frac > 0:
@@ -128,7 +124,7 @@ def pqm_pvalue(
     re_tessellation: Optional[int] = None,
     whiten: bool = False,
     x_frac: Optional[float] = None,
-    gauss_frac: Optional[float] = None,
+    gauss_frac: float = 0.0,
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -159,6 +155,11 @@ def pqm_pvalue(
         y_samples as reference samples. Ideally, ``x_frac = len(x_samples) /
         (len(x_samples) + len(y_samples))`` which is what is done for x_frac =
         None (default).
+    gauss_frac : float
+        Fraction of samples to take from gaussian distribution with mean/std
+        determined from the other reference samples. This ensures full support
+        of the reference samples if pathological behavior is expected.
+        Default: 0.0 no gaussian samples
 
     Returns
     -------
@@ -189,7 +190,7 @@ def pqm_chi2(
     re_tessellation: Optional[int] = None,
     whiten: bool = False,
     x_frac: Optional[float] = None,
-    gauss_frac: Optional[float] = None,
+    gauss_frac: float = 0.0,
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -220,6 +221,11 @@ def pqm_chi2(
         y_samples as reference samples. Ideally, ``x_frac = len(x_samples) /
         (len(x_samples) + len(y_samples))`` which is what is done for x_frac =
         None (default).
+    gauss_frac : float
+        Fraction of samples to take from gaussian distribution with mean/std
+        determined from the other reference samples. This ensures full support
+        of the reference samples if pathological behavior is expected.
+        Default: 0.0 no gaussian samples
 
     Returns
     -------

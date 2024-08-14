@@ -1,4 +1,5 @@
 from typing import Optional
+import warnings
 
 import numpy as np
 from scipy.stats import chi2_contingency, chi2
@@ -65,11 +66,16 @@ def _pqm_test(
     if x_frac is None:
         x_frac = len(x_samples) / (len(x_samples) + len(y_samples))
 
+    # Determine number of samples from each distribution (x_samples, y_samples, gaussian)
+    Nx, Ny, Ng = np.random.multinomial(
+        num_refs,
+        [x_frac * (1.0 - gauss_frac), (1.0 - x_frac) * (1.0 - gauss_frac), gauss_frac],
+    )
+    print(Nx, Ny, Ng)
+
     # Collect reference samples from x_samples
     if x_frac > 0:
-        xrefs = np.random.choice(
-            len(x_samples), int(x_frac * (1.0 - gauss_frac) * num_refs), replace=False
-        )
+        xrefs = np.random.choice(len(x_samples), Nx, replace=False)
         N = np.arange(len(x_samples))
         N[xrefs] = -1
         N = N[N >= 0]
@@ -79,9 +85,7 @@ def _pqm_test(
 
     # Collect reference samples from y_samples
     if x_frac < 1:
-        yrefs = np.random.choice(
-            len(y_samples), int((1.0 - x_frac) * (1.0 - gauss_frac) * num_refs), replace=False
-        )
+        yrefs = np.random.choice(len(y_samples), Ny, replace=False)
         N = np.arange(len(y_samples))
         N[yrefs] = -1
         N = N[N >= 0]
@@ -93,11 +97,19 @@ def _pqm_test(
     refs = np.concatenate([xrefs, yrefs], axis=0)
 
     # get gaussian reference points if requested
-    if gauss_frac > 0:
+    if Ng > 0:
+        if Nx + Ny > 2:
+            m, s = np.mean(refs, axis=0), np.std(refs, axis=0)
+        else:
+            warnings.warn(
+                f"Very low number of x/y reference samples used ({Nx+Ny}). Initializing gaussian from y_samples.",
+                UserWarning,
+            )
+            m, s = np.mean(y_samples, axis=0), np.std(y_samples, axis=0)
         gauss_refs = np.random.normal(
-            loc=np.mean(refs, axis=0),
-            scale=np.std(refs, axis=0),
-            size=(int(gauss_frac * num_refs), *refs.shape[1:]),
+            loc=m,
+            scale=s,
+            size=(Ng, *x_samples.shape[1:]),
         )
         refs = np.concatenate([refs, gauss_refs], axis=0)
 

@@ -83,7 +83,7 @@ def _pqm_test(
     )
 
     # Collect reference samples from x_samples
-    if x_frac > 0:
+    if Nx > 0:
         xrefs = np.random.choice(len(x_samples), Nx, replace=False)
         N = np.arange(len(x_samples))
         N[xrefs] = -1
@@ -93,7 +93,7 @@ def _pqm_test(
         xrefs = np.zeros((0,) + x_samples.shape[1:])
 
     # Collect reference samples from y_samples
-    if x_frac < 1:
+    if Ny > 0:
         yrefs = np.random.choice(len(y_samples), Ny, replace=False)
         N = np.arange(len(y_samples))
         N[yrefs] = -1

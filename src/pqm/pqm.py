@@ -1,4 +1,5 @@
 from typing import Optional
+import warnings
 
 import numpy as np
 from scipy.stats import chi2_contingency, chi2
@@ -39,8 +40,18 @@ def _pqm_test(
     gauss_frac : float
         Fraction of samples to take from gaussian distribution with mean/std
         determined from the other reference samples. This ensures full support
-        of the reference samples if pathological behavior is expected.
-        Default: 0.0 no gaussian samples.
+        of the reference samples if pathological behavior is expected. Default:
+        0.0 no gaussian samples.
+
+    Note
+    ----
+        When using ``x_frac`` and ``gauss_frac``, note that the number of
+        reference samples from the x_samples, y_samples, and gaussian
+        distribution will be determined by a multinomial distribution. This
+        means that the actual number of reference samples from each distribution
+        may not be exactly equal to the requested fractions, but will on average
+        equal those numbers. For best results, we suggest using a large number
+        of re-tessellations, though this is our recommendation in any case.
 
     Returns
     -------
@@ -65,11 +76,15 @@ def _pqm_test(
     if x_frac is None:
         x_frac = len(x_samples) / (len(x_samples) + len(y_samples))
 
+    # Determine number of samples from each distribution (x_samples, y_samples, gaussian)
+    Nx, Ny, Ng = np.random.multinomial(
+        num_refs,
+        [x_frac * (1.0 - gauss_frac), (1.0 - x_frac) * (1.0 - gauss_frac), gauss_frac],
+    )
+
     # Collect reference samples from x_samples
-    if x_frac > 0:
-        xrefs = np.random.choice(
-            len(x_samples), int(x_frac * (1.0 - gauss_frac) * num_refs), replace=False
-        )
+    if Nx > 0:
+        xrefs = np.random.choice(len(x_samples), Nx, replace=False)
         N = np.arange(len(x_samples))
         N[xrefs] = -1
         N = N[N >= 0]
@@ -78,10 +93,8 @@ def _pqm_test(
         xrefs = np.zeros((0,) + x_samples.shape[1:])
 
     # Collect reference samples from y_samples
-    if x_frac < 1:
-        yrefs = np.random.choice(
-            len(y_samples), int((1.0 - x_frac) * (1.0 - gauss_frac) * num_refs), replace=False
-        )
+    if Ny > 0:
+        yrefs = np.random.choice(len(y_samples), Ny, replace=False)
         N = np.arange(len(y_samples))
         N[yrefs] = -1
         N = N[N >= 0]
@@ -93,11 +106,19 @@ def _pqm_test(
     refs = np.concatenate([xrefs, yrefs], axis=0)
 
     # get gaussian reference points if requested
-    if gauss_frac > 0:
+    if Ng > 0:
+        if Nx + Ny > 2:
+            m, s = np.mean(refs, axis=0), np.std(refs, axis=0)
+        else:
+            warnings.warn(
+                f"Very low number of x/y reference samples used ({Nx+Ny}). Initializing gaussian from all y_samples. We suggest increasing num_refs or decreasing gauss_frac.",
+                UserWarning,
+            )
+            m, s = np.mean(y_samples, axis=0), np.std(y_samples, axis=0)
         gauss_refs = np.random.normal(
-            loc=np.mean(refs, axis=0),
-            scale=np.std(refs, axis=0),
-            size=(int(gauss_frac * num_refs), *refs.shape[1:]),
+            loc=m,
+            scale=s,
+            size=(Ng, *x_samples.shape[1:]),
         )
         refs = np.concatenate([refs, gauss_refs], axis=0)
 
@@ -128,7 +149,8 @@ def pqm_pvalue(
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
-    are drawn form the same distribution.
+    are drawn from the same distribution. This version returns the pvalue under
+    the null hypothesis that both samples are drawn from the same distribution.
 
     Parameters
     ----------
@@ -158,8 +180,18 @@ def pqm_pvalue(
     gauss_frac : float
         Fraction of samples to take from gaussian distribution with mean/std
         determined from the other reference samples. This ensures full support
-        of the reference samples if pathological behavior is expected.
-        Default: 0.0 no gaussian samples
+        of the reference samples if pathological behavior is expected. Default:
+        0.0 no gaussian samples.
+
+    Note
+    ----
+        When using ``x_frac`` and ``gauss_frac``, note that the number of
+        reference samples from the x_samples, y_samples, and gaussian
+        distribution will be determined by a multinomial distribution. This
+        means that the actual number of reference samples from each distribution
+        may not be exactly equal to the requested fractions, but will on average
+        equal those numbers. For best results, we suggest using a large number
+        of re-tessellations, though this is our recommendation in any case.
 
     Returns
     -------
@@ -194,7 +226,8 @@ def pqm_chi2(
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
-    are drawn form the same distribution.
+    are drawn from the same distribution. This version returns the chi^2
+    statistic with dof = num_refs-1.
 
     Parameters
     ----------
@@ -224,13 +257,34 @@ def pqm_chi2(
     gauss_frac : float
         Fraction of samples to take from gaussian distribution with mean/std
         determined from the other reference samples. This ensures full support
-        of the reference samples if pathological behavior is expected.
-        Default: 0.0 no gaussian samples
+        of the reference samples if pathological behavior is expected. Default:
+        0.0 no gaussian samples.
+
+    Note
+    ----
+        When using ``x_frac`` and ``gauss_frac``, note that the number of
+        reference samples from the x_samples, y_samples, and gaussian
+        distribution will be determined by a multinomial distribution. This
+        means that the actual number of reference samples from each distribution
+        may not be exactly equal to the requested fractions, but will on average
+        equal those numbers. For best results, we suggest using a large number
+        of re-tessellations, though this is our recommendation in any case.
+
+    Note
+    ----
+        Some voronoi bins may be empty after counting. Due to the nature of
+        ``scipy.stats.chi2_contingency`` we must first remove those voronoi
+        cells, meaning that the dof of the chi^2 would change. To mitigate this
+        effect, we rescale the chi^2 statistic to have the same cumulative
+        probability as the desired chi^2 statistic. Thus, the returned chi^2 is
+        always in reference to dof = num_refs-1. Thus users should not need to
+        worry about this, but it is worth noting, please contact us if you
+        notice unusual behavior.
 
     Returns
     -------
     float or list
-        chi2 statistic(s) and degree(s) of freedom.
+        chi2 statistic(s).
     """
     if re_tessellation is not None:
         return [

@@ -8,6 +8,21 @@ from scipy.spatial import KDTree
 __all__ = ("pqm_chi2", "pqm_pvalue")
 
 
+def _mean_std(sample1, sample2, axis=0):
+    """Get the mean and std of two combined samples, without actually combining them, to save memory."""
+    n1, *_ = sample1.shape
+    n2, *_ = sample2.shape
+    # Get mean/std of combined sample
+    mx, sx = np.mean(sample1, axis=axis), np.std(sample1, axis=axis)
+    my, sy = np.mean(sample2, axis=axis), np.std(sample2, axis=axis)
+    m = (n1 * mx + n2 * my) / (n1 + n2)
+    s = np.sqrt(
+        ((n1 - 1) * (sx**2) + (n2 - 1) * (sy**2) + n1 * n2 * (mx - my) ** 2 / (n1 + n2))
+        / (n1 + n2 - 1)
+    )
+    return m, s
+
+
 def _pqm_test(
     x_samples: np.ndarray,
     y_samples: np.ndarray,
@@ -58,17 +73,16 @@ def _pqm_test(
     tuple
         Results from scipy.stats.chi2_contingency function.
     """
-    if len(y_samples) < num_refs:
-        raise ValueError(
-            "Number of reference samples must be less than the number of true samples."
-        )
-    elif len(y_samples) < 2 * num_refs:
-        print(
-            "Warning: Number of y_samples is small (less than twice the number of reference samples). Result may have high variance."
+    nx, *D = x_samples.shape
+    ny, *D = y_samples.shape
+    if (nx + ny) < num_refs:
+        raise ValueError("Number of reference samples must be less than the number of samples.")
+    elif (nx + ny) < 2 * num_refs:
+        warnings.warn(
+            "Number of samples is small (less than twice the number of reference samples). Result will have high variance and/or be non-discriminating."
         )
     if whiten:
-        mean = np.mean(y_samples, axis=0)
-        std = np.std(y_samples, axis=0)
+        mean, std = _mean_std(x_samples, y_samples)
         y_samples = (y_samples - mean) / std
         x_samples = (x_samples - mean) / std
 
@@ -107,18 +121,11 @@ def _pqm_test(
 
     # get gaussian reference points if requested
     if Ng > 0:
-        if Nx + Ny > 2:
-            m, s = np.mean(refs, axis=0), np.std(refs, axis=0)
-        else:
-            warnings.warn(
-                f"Very low number of x/y reference samples used ({Nx+Ny}). Initializing gaussian from all y_samples. We suggest increasing num_refs or decreasing gauss_frac.",
-                UserWarning,
-            )
-            m, s = np.mean(y_samples, axis=0), np.std(y_samples, axis=0)
+        m, s = _mean_std(x_samples, y_samples)
         gauss_refs = np.random.normal(
             loc=m,
             scale=s,
-            size=(Ng, *x_samples.shape[1:]),
+            size=(Ng, *D),
         )
         refs = np.concatenate([refs, gauss_refs], axis=0)
 
@@ -134,6 +141,25 @@ def _pqm_test(
     # Remove reference samples with no counts
     C = (counts_x > 0) | (counts_y > 0)
     counts_x, counts_y = counts_x[C], counts_y[C]
+
+    n_filled_bins = np.sum((counts_x + counts_y) > 0)
+    if n_filled_bins == 1:
+        raise ValueError(
+            """
+            Only one Voronoi cell has samples, so chi^2 cannot 
+            be computed. This is likely due to a small number 
+            of samples or a pathological distribution. If possible, 
+            increase the number of x_samples and y_samples.
+            """
+        )
+    if n_filled_bins < (num_refs // 4):
+        warnings.warn(
+            """
+            Less than a quarter of the Voronoi cells have any samples 
+            in them. Result may be unreliable. If possible, increase 
+            the number of x_samples and y_samples.
+            """
+        )
 
     return chi2_contingency(np.array([counts_x, counts_y]))
 
@@ -299,6 +325,7 @@ def pqm_chi2(
             for _ in range(re_tessellation)
         ]
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten, x_frac, gauss_frac)
+
     if dof != num_refs - 1:
         # Rescale chi2 to new value which has the same cumulative probability
         if chi2_stat / dof < 10:

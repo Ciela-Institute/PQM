@@ -78,8 +78,10 @@ def _pqm_test(
     """
     nx, *D = x_samples.shape
     ny, *D = y_samples.shape
-    if (nx + ny) < num_refs:
-        raise ValueError("Number of reference samples must be less than the number of samples.")
+    if (nx + ny) <= num_refs + 2:
+        raise ValueError(
+            "Number of reference samples (num_ref) must be less than the number of x/y samples. Ideally much less."
+        )
     elif (nx + ny) < 2 * num_refs:
         warnings.warn(
             "Number of samples is small (less than twice the number of reference samples). Result will have high variance and/or be non-discriminating."
@@ -90,8 +92,7 @@ def _pqm_test(
         x_samples = (x_samples - mean) / std
 
     # Determine fraction of x_samples to use as reference samples
-    if x_frac is None:
-        x_frac = nx / (nx + ny)
+    x_frac = nx / (nx + ny) if x_frac is None else x_frac
 
     # Determine number of samples from each distribution (x_samples, y_samples, gaussian)
     Nx, Ny, Ng = np.random.multinomial(
@@ -134,7 +135,7 @@ def _pqm_test(
     C = (counts_x > 0) | (counts_y > 0)
     counts_x, counts_y = counts_x[C], counts_y[C]
 
-    n_filled_bins = np.sum((counts_x + counts_y) > 0)
+    n_filled_bins = np.sum(C)
     if n_filled_bins == 1:
         raise ValueError(
             """
@@ -144,10 +145,10 @@ def _pqm_test(
             increase the number of x_samples and y_samples.
             """
         )
-    if n_filled_bins < (num_refs // 4):
+    if n_filled_bins < (num_refs // 2):
         warnings.warn(
             """
-            Less than a quarter of the Voronoi cells have any samples in them.
+            Less than half of the Voronoi cells have any samples in them.
             Possibly due to a small number of samples or a pathological
             distribution. Result may be unreliable. If possible, increase the
             number of x_samples and y_samples.

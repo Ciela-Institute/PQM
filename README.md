@@ -36,18 +36,22 @@ chi2_stat = pqm_chi2(x_sample, y_sample, num_refs = 100, re_tessellation = 50)
 print(np.mean(chi2_stat), np.std(chi2_stat))
 ```
 
-If your two samples are drawn from the same distribution, then the p-value should
-be drawn from the random uniform(0,1) distribution. This means that if you get a
-very small value (i.e., 1e-6), then you have failed the null hypothesis test, and
-the two samples are not drawn from the same distribution.
+If your two samples are drawn from the same distribution, then the p-value
+should be drawn from the random uniform(0,1) distribution. This means that if
+you get a very small value (i.e., 1e-6), then you have failed the null
+hypothesis test, and the two samples are not drawn from the same distribution.
+If you get values approximately equal to 1 every time then that suggests
+potential duplication of samples between `x_samples` and `y_samples`.
 
 For the chi^2 metric, given your two sets of samples, if they come from the same
-distribution, the histogram of your chi² values should follow the chi² distribution. 
-The peak of this distribution will be at DoF - 2, and the standard deviation will 
-be √(2 * DoF). If your histogram shifts to the right of the expected chi² distribution, 
-it suggests that the samples are out of distribution. Conversely, if the histogram shifts 
-to the left, it indicates potential duplication or memorization (particularly relevant 
-for generative models).
+distribution, the histogram of your chi^2 values should follow the chi^2
+distribution. The degrees of freedom (DoF) will equal `DoF = num_refs - 1` The
+peak of this distribution will be at `DoF - 2`, the mean will equal `DoF`, and
+the standard deviation will be `sqrt(2 * DoF)`. If your chi^2 values are too
+high (`chi^2 / DoF > 1`), it suggests that the samples are out of distribution.
+Conversely, if the values are too low (`chi^2 / DoF < 1`), it indicates
+potential duplication of samples between `x_samples` and `y_samples` (i.e.
+memorization for generative models).
 
 
 ## Developing
@@ -60,3 +64,5 @@ cd PQM
 git checkout -b my-new-branch
 pip install -e .
 ```
+
+But make an issue first so we can discuss implementation ideas.

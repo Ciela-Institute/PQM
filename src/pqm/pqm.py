@@ -8,6 +8,21 @@ from scipy.spatial import KDTree
 __all__ = ("pqm_chi2", "pqm_pvalue")
 
 
+def _mean_std(sample1, sample2, axis=0):
+    """Get the mean and std of two combined samples, without actually combining them, to save memory."""
+    n1, *_ = sample1.shape
+    n2, *_ = sample2.shape
+    # Get mean/std of combined sample
+    mx, sx = np.mean(sample1, axis=axis), np.std(sample1, axis=axis)
+    my, sy = np.mean(sample2, axis=axis), np.std(sample2, axis=axis)
+    m = (n1 * mx + n2 * my) / (n1 + n2)
+    s = np.sqrt(
+        ((n1 - 1) * (sx**2) + (n2 - 1) * (sy**2) + n1 * n2 * (mx - my) ** 2 / (n1 + n2))
+        / (n1 + n2 - 1)
+    )
+    return m, s
+
+
 def _pqm_test(
     x_samples: np.ndarray,
     y_samples: np.ndarray,
@@ -39,86 +54,71 @@ def _pqm_test(
         None (default).
     gauss_frac : float
         Fraction of samples to take from gaussian distribution with mean/std
-        determined from the other reference samples. This ensures full support
-        of the reference samples if pathological behavior is expected. Default:
-        0.0 no gaussian samples.
+        determined from the combined x_samples/y_samples. This ensures full
+        support of the reference samples if pathological behavior is expected.
+        Default: 0.0 no gaussian samples.
 
     Note
     ----
         When using ``x_frac`` and ``gauss_frac``, note that the number of
-        reference samples from the x_samples, y_samples, and gaussian
+        reference samples from the x_samples, y_samples, and Gaussian
         distribution will be determined by a multinomial distribution. This
         means that the actual number of reference samples from each distribution
         may not be exactly equal to the requested fractions, but will on average
-        equal those numbers. For best results, we suggest using a large number
-        of re-tessellations, though this is our recommendation in any case.
+        equal those numbers. The mean relative number of reference samples drawn
+        from x_samples, y_samples, and Gaussian is ``Nx=x_frac*(1-gauss_frac)``,
+        ``Ny=(1-x_frac)*(1-gauss_frac)``, and ``Ng=gauss_frac`` respectively.
+        For best results, we suggest using a large number of re-tessellations,
+        though this is our recommendation in any case.
 
     Returns
     -------
     tuple
         Results from scipy.stats.chi2_contingency function.
     """
-    if len(y_samples) < num_refs:
+    nx, *D = x_samples.shape
+    ny, *D = y_samples.shape
+    if (nx + ny) <= num_refs + 2:
         raise ValueError(
-            "Number of reference samples must be less than the number of true samples."
+            "Number of reference samples (num_ref) must be less than the number of x/y samples. Ideally much less."
         )
-    elif len(y_samples) < 2 * num_refs:
-        print(
-            "Warning: Number of y_samples is small (less than twice the number of reference samples). Result may have high variance."
+    elif (nx + ny) < 2 * num_refs:
+        warnings.warn(
+            "Number of samples is small (less than twice the number of reference samples). Result will have high variance and/or be non-discriminating."
         )
     if whiten:
-        mean = np.mean(y_samples, axis=0)
-        std = np.std(y_samples, axis=0)
+        mean, std = _mean_std(x_samples, y_samples)
         y_samples = (y_samples - mean) / std
         x_samples = (x_samples - mean) / std
 
     # Determine fraction of x_samples to use as reference samples
-    if x_frac is None:
-        x_frac = len(x_samples) / (len(x_samples) + len(y_samples))
+    x_frac = nx / (nx + ny) if x_frac is None else x_frac
 
     # Determine number of samples from each distribution (x_samples, y_samples, gaussian)
     Nx, Ny, Ng = np.random.multinomial(
         num_refs,
         [x_frac * (1.0 - gauss_frac), (1.0 - x_frac) * (1.0 - gauss_frac), gauss_frac],
     )
+    assert (Nx + Ny + Ng) == num_refs, f"Something went wrong. Nx={Nx}, Ny={Ny}, Ng={Ng} should sum to num_refs={num_refs}"  # fmt: skip
 
     # Collect reference samples from x_samples
-    if Nx > 0:
-        xrefs = np.random.choice(len(x_samples), Nx, replace=False)
-        N = np.arange(len(x_samples))
-        N[xrefs] = -1
-        N = N[N >= 0]
-        xrefs, x_samples = x_samples[xrefs], x_samples[N]
-    else:
-        xrefs = np.zeros((0,) + x_samples.shape[1:])
+    xrefs = np.random.choice(nx, Nx, replace=False)
+    xrefs, x_samples = x_samples[xrefs], np.delete(x_samples, xrefs, axis=0)
 
     # Collect reference samples from y_samples
-    if Ny > 0:
-        yrefs = np.random.choice(len(y_samples), Ny, replace=False)
-        N = np.arange(len(y_samples))
-        N[yrefs] = -1
-        N = N[N >= 0]
-        yrefs, y_samples = y_samples[yrefs], y_samples[N]
-    else:
-        yrefs = np.zeros((0,) + y_samples.shape[1:])
+    yrefs = np.random.choice(ny, Ny, replace=False)
+    yrefs, y_samples = y_samples[yrefs], np.delete(y_samples, yrefs, axis=0)
 
     # Join the full set of reference samples
     refs = np.concatenate([xrefs, yrefs], axis=0)
 
     # get gaussian reference points if requested
     if Ng > 0:
-        if Nx + Ny > 2:
-            m, s = np.mean(refs, axis=0), np.std(refs, axis=0)
-        else:
-            warnings.warn(
-                f"Very low number of x/y reference samples used ({Nx+Ny}). Initializing gaussian from all y_samples. We suggest increasing num_refs or decreasing gauss_frac.",
-                UserWarning,
-            )
-            m, s = np.mean(y_samples, axis=0), np.std(y_samples, axis=0)
+        m, s = _mean_std(x_samples, y_samples)
         gauss_refs = np.random.normal(
             loc=m,
             scale=s,
-            size=(Ng, *x_samples.shape[1:]),
+            size=(Ng, *D),
         )
         refs = np.concatenate([refs, gauss_refs], axis=0)
 
@@ -135,7 +135,27 @@ def _pqm_test(
     C = (counts_x > 0) | (counts_y > 0)
     counts_x, counts_y = counts_x[C], counts_y[C]
 
-    return chi2_contingency(np.array([counts_x, counts_y]))
+    n_filled_bins = np.sum(C)
+    if n_filled_bins == 1:
+        raise ValueError(
+            """
+            Only one Voronoi cell has samples, so chi^2 cannot 
+            be computed. This is likely due to a small number 
+            of samples or a pathological distribution. If possible, 
+            increase the number of x_samples and y_samples.
+            """
+        )
+    if n_filled_bins < (num_refs // 2):
+        warnings.warn(
+            """
+            Less than half of the Voronoi cells have any samples in them.
+            Possibly due to a small number of samples or a pathological
+            distribution. Result may be unreliable. If possible, increase the
+            number of x_samples and y_samples.
+            """
+        )
+
+    return chi2_contingency(np.stack([counts_x, counts_y]))
 
 
 def pqm_pvalue(
@@ -155,22 +175,22 @@ def pqm_pvalue(
     Parameters
     ----------
     x_samples : np.ndarray
-        Samples from the first distribution, test samples. Must have shape (N,
-        *D) N is the number of x samples, and D is the dimensionality of the
-        samples.
+        Samples from the first distribution. Must have shape (N, *D) N is the
+        number of x samples, and D is the dimensionality of the samples.
     y_samples : np.ndarray
-        Samples from the second distribution, reference samples. Must have shape
-        (M, *D) M is the number of y samples, and D is the dimensionality of the
-        samples.
+        Samples from the second distribution. Must have shape (M, *D) M is the
+        number of y samples, and D is the dimensionality of the samples.
     num_refs : int
-        Number of reference samples to use. Note that these will be drawn from
-        y_samples, and then removed from the y_samples array.
+        Number of reference samples to use. These samples will be drawn from
+        x_samples, y_samples, and/or a Gaussian distribution, see the note
+        below.
     re_tessellation : Optional[int]
         Number of times pqm_pvalue is called, re-tesselating the space. No
         re_tessellation if None (default).
     whiten : bool
         If True, whiten the samples by subtracting the mean and dividing by the
-        standard deviation.
+        standard deviation. mean and std are calculated from the combined
+        x_samples and y_samples.
     x_frac : float
         Fraction of x_samples to use as reference samples. ``x_frac = 1`` will
         use only x_samples as reference samples, ``x_frac = 0`` will use only
@@ -179,19 +199,22 @@ def pqm_pvalue(
         None (default).
     gauss_frac : float
         Fraction of samples to take from gaussian distribution with mean/std
-        determined from the other reference samples. This ensures full support
-        of the reference samples if pathological behavior is expected. Default:
-        0.0 no gaussian samples.
+        determined from the combined x_samples/y_samples. This ensures full
+        support of the reference samples if pathological behavior is expected.
+        Default: 0.0 no gaussian samples.
 
     Note
     ----
         When using ``x_frac`` and ``gauss_frac``, note that the number of
-        reference samples from the x_samples, y_samples, and gaussian
+        reference samples from the x_samples, y_samples, and Gaussian
         distribution will be determined by a multinomial distribution. This
         means that the actual number of reference samples from each distribution
         may not be exactly equal to the requested fractions, but will on average
-        equal those numbers. For best results, we suggest using a large number
-        of re-tessellations, though this is our recommendation in any case.
+        equal those numbers. The mean relative number of reference samples drawn
+        from x_samples, y_samples, and Gaussian is ``Nx=x_frac*(1-gauss_frac)``,
+        ``Ny=(1-x_frac)*(1-gauss_frac)``, and ``Ng=gauss_frac`` respectively.
+        For best results, we suggest using a large number of re-tessellations,
+        though this is our recommendation in any case.
 
     Returns
     -------
@@ -232,22 +255,22 @@ def pqm_chi2(
     Parameters
     ----------
     x_samples : np.ndarray
-        Samples from the first distribution, test samples. Must have shape (N,
-        *D) N is the number of x samples, and D is the dimensionality of the
-        samples.
+        Samples from the first distribution. Must have shape (N, *D) N is the
+        number of x samples, and D is the dimensionality of the samples.
     y_samples : np.ndarray
-        Samples from the second distribution, reference samples. Must have shape
-        (M, *D) M is the number of y samples, and D is the dimensionality of the
-        samples.
+        Samples from the second distribution. Must have shape (M, *D) M is the
+        number of y samples, and D is the dimensionality of the samples.
     num_refs : int
-        Number of reference samples to use. Note that these will be drawn from
-        y_samples, and then removed from the y_samples array.
+        Number of reference samples to use. These samples will be drawn from
+        x_samples, y_samples, and/or a Gaussian distribution, see the note
+        below.
     re_tessellation : Optional[int]
-        Number of times pqm_chi2 is called, re-tesselating the space. No
+        Number of times pqm_pvalue is called, re-tesselating the space. No
         re_tessellation if None (default).
     whiten : bool
         If True, whiten the samples by subtracting the mean and dividing by the
-        standard deviation.
+        standard deviation. mean and std are calculated from the combined
+        x_samples and y_samples.
     x_frac : float
         Fraction of x_samples to use as reference samples. ``x_frac = 1`` will
         use only x_samples as reference samples, ``x_frac = 0`` will use only
@@ -256,19 +279,22 @@ def pqm_chi2(
         None (default).
     gauss_frac : float
         Fraction of samples to take from gaussian distribution with mean/std
-        determined from the other reference samples. This ensures full support
-        of the reference samples if pathological behavior is expected. Default:
-        0.0 no gaussian samples.
+        determined from the combined x_samples/y_samples. This ensures full
+        support of the reference samples if pathological behavior is expected.
+        Default: 0.0 no gaussian samples.
 
     Note
     ----
         When using ``x_frac`` and ``gauss_frac``, note that the number of
-        reference samples from the x_samples, y_samples, and gaussian
+        reference samples from the x_samples, y_samples, and Gaussian
         distribution will be determined by a multinomial distribution. This
         means that the actual number of reference samples from each distribution
         may not be exactly equal to the requested fractions, but will on average
-        equal those numbers. For best results, we suggest using a large number
-        of re-tessellations, though this is our recommendation in any case.
+        equal those numbers. The mean relative number of reference samples drawn
+        from x_samples, y_samples, and Gaussian is ``Nx=x_frac*(1-gauss_frac)``,
+        ``Ny=(1-x_frac)*(1-gauss_frac)``, and ``Ng=gauss_frac`` respectively.
+        For best results, we suggest using a large number of re-tessellations,
+        though this is our recommendation in any case.
 
     Note
     ----
@@ -299,6 +325,7 @@ def pqm_chi2(
             for _ in range(re_tessellation)
         ]
     chi2_stat, _, dof, _ = _pqm_test(x_samples, y_samples, num_refs, whiten, x_frac, gauss_frac)
+
     if dof != num_refs - 1:
         # Rescale chi2 to new value which has the same cumulative probability
         if chi2_stat / dof < 10:

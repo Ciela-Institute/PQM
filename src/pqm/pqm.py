@@ -1,370 +1,22 @@
-from typing import Optional
+from typing import Optional, Union, Tuple
 import warnings
+
 import torch
 import numpy as np
-from scipy.stats import chi2_contingency, chi2
-from scipy.spatial.distance import cdist
-from torch.distributions import Multinomial
-from typing import Optional, Union, Tuple
+from scipy.stats import chi2_contingency
+
+from .utils import (
+    _mean_std_numpy,
+    _mean_std_torch,
+    _sample_reference_indices_numpy,
+    _sample_reference_indices_torch,
+    _compute_counts_numpy,
+    _compute_counts_torch,
+    _rescale_chi2,
+)
 
 __all__ = ("pqm_chi2", "pqm_pvalue")
 
-def _mean_std(sample1, sample2, dim=0):
-    """Get the mean and std of two combined samples without actually combining them."""
-    # Check if both samples are PyTorch tensors
-    if isinstance(sample1, torch.Tensor) and isinstance(sample2, torch.Tensor):
-        n1 = sample1.shape[dim]
-        n2 = sample2.shape[dim]
-        
-        mx = torch.mean(sample1, dim=dim)
-        sx = torch.std(sample1, dim=dim, unbiased=True)
-        my = torch.mean(sample2, dim=dim)
-        sy = torch.std(sample2, dim=dim, unbiased=True)
-        
-        m = (n1 * mx + n2 * my) / (n1 + n2)
-        s = torch.sqrt(
-            (
-                (n1 - 1) * (sx ** 2)
-                + (n2 - 1) * (sy ** 2)
-                + n1 * n2 * (mx - my) ** 2 / (n1 + n2)
-            )
-            / (n1 + n2 - 1)
-        )
-        return m, s
-
-    # Check if both samples are NumPy arrays
-    elif isinstance(sample1, np.ndarray) and isinstance(sample2, np.ndarray):
-        n1 = sample1.shape[dim]
-        n2 = sample2.shape[dim]
-        
-        mx = np.mean(sample1, axis=dim)
-        sx = np.std(sample1, axis=dim, ddof=1)
-        my = np.mean(sample2, axis=dim)
-        sy = np.std(sample2, axis=dim, ddof=1)
-        
-        m = (n1 * mx + n2 * my) / (n1 + n2)
-        s = np.sqrt(
-            (
-                (n1 - 1) * (sx ** 2)
-                + (n2 - 1) * (sy ** 2)
-                + n1 * n2 * (mx - my) ** 2 / (n1 + n2)
-            )
-            / (n1 + n2 - 1)
-        )
-        return m, s
-
-def rescale_chi2(chi2_stat, orig_dof, target_dof, device):
-    """
-    Rescale chi2 statistic using appropriate methods depending on the device.
-    """        
-    if device.type == 'cuda' or device == 'cuda':
-        # Move tensors to CPU and convert to NumPy
-        chi2_stat_cpu = chi2_stat.cpu().item()  # Convert to float
-        orig_dof_cpu = orig_dof.cpu().item()    # Convert to float
-    else:
-        chi2_stat_cpu = chi2_stat
-        orig_dof_cpu = orig_dof
-
-    if orig_dof_cpu == target_dof:
-        return chi2_stat_cpu
-        
-    if chi2_stat_cpu / orig_dof_cpu < 10:
-        # Use cumulative probability method for better accuracy
-        cp = chi2.sf(chi2_stat_cpu, orig_dof_cpu)
-        return chi2.isf(cp, target_dof)
-    else:
-        # Use simple scaling for large values
-        return chi2_stat_cpu * target_dof / orig_dof_cpu        
-
-def _chi2_contingency_torch(
-    counts_x: torch.Tensor,
-    counts_y: torch.Tensor
-) -> Tuple[torch.Tensor, float, torch.Tensor, torch.Tensor]:
-    """
-    Perform chi-squared contingency test using PyTorch tensors.
-    
-    Returns:
-        chi2_stat (torch.Tensor): Chi-squared statistic.
-        p_value (float): p-value.
-        dof (torch.Tensor): Degrees of freedom.
-        expected (torch.Tensor): Expected frequencies.
-    """
-    counts = torch.stack([counts_x, counts_y])
-    
-    # Observed counts
-    O = counts.float()
-    
-    # Row sums and column sums
-    row_sums = O.sum(dim=1, keepdim=True)  # shape (2, 1)
-    col_sums = O.sum(dim=0, keepdim=True)  # shape (1, N)
-    total = O.sum()
-    
-    # Expected counts under the null hypothesis of independence
-    E = row_sums @ col_sums / total  # shape (2, N)
-    
-    # Degrees of freedom
-    dof = (O.size(0) - 1) * (O.size(1) - 1)
-    
-    # Avoid division by zero
-    mask = E > 0
-    O_masked = O[mask]
-    E_masked = E[mask]
-    
-    # Compute chi-squared statistic
-    chi2_stat = ((O_masked - E_masked) ** 2 / E_masked).sum()
-    
-    # Move dof and chi2_stat to the same device
-    dof = torch.tensor(dof, dtype=torch.float32, device=chi2_stat.device)
-    
-    # Compute p-value using the survival function (1 - CDF)
-    p_value = torch.special.gammaincc(dof / 2, chi2_stat / 2).item()
-    
-    return chi2_stat, p_value, dof, E
-
-def _sample_reference_indices_numpy(Nx, nx, Ny, ny, Ng, x_samples, y_samples):
-    """
-    Helper function to sample references for CPU-based NumPy computations.
-
-    Parameters
-    ----------
-    Nx : int
-        Number of references to sample from x_samples.
-    nx : int
-        Number of samples in x_samples.
-    Ny : int
-        Number of references to sample from y_samples.
-    ny : int
-        Number of samples in y_samples.
-    Ng : int
-        Number of references to sample from a Gaussian distribution.
-
-    Returns
-    -------
-    np.ndarray  
-        References samples.
-    """
-
-    if Nx > nx:
-        raise ValueError("Cannot sample more references from x_samples than available")
-    if Ny > ny:
-        raise ValueError("Cannot sample more references from y_samples than available")
-    
-    # Reference samples from x_samples
-    xrefs_indices = np.random.choice(nx, Nx, replace=False)
-    xrefs = x_samples[xrefs_indices]
-    x_samples = np.delete(x_samples, xrefs_indices, axis=0)
-    
-    # Reference samples from y_samples
-    yrefs_indices = np.random.choice(ny, Ny, replace=False)
-    yrefs = y_samples[yrefs_indices]
-    y_samples = np.delete(y_samples, yrefs_indices, axis=0)
-    
-    # Combine references
-    refs = np.concatenate([xrefs, yrefs], axis=0)
-    
-    # Gaussian references
-    if Ng > 0:
-        m, s = _mean_std(x_samples, y_samples)
-        gauss_refs = np.random.normal(
-            loc=m,
-            scale=s,
-            size=(Ng, ) + tuple(x_samples.shape[1:])
-        )
-        refs = np.concatenate([refs, gauss_refs], axis=0)
-
-    return refs
-
-def _compute_distances_numpy(x_samples, y_samples, refs, current_num_refs, num_refs):
-    """
-    Helper function to calculate distances for CPU-based NumPy computations.
-
-    Parameters
-    ----------
-    x_samples : np.ndarray
-        Samples from the first distribution. Must have shape (N, *D) N is the
-        number of x samples, and D is the dimensionality of the samples.
-    y_samples : np.ndarray
-        Samples from the second distribution. Must have shape (M, *D) M is the
-        number of y samples, and D is the dimensionality of the samples.
-    refs : np.ndarray
-        Reference samples. Must have shape (num_refs, *D) where D is the
-        dimensionality of the samples.
-    current_num_refs : int
-        Number of reference samples used in the test.
-    num_refs : int
-        Number of reference samples to use.
-
-    Returns
-    -------
-    tuple
-        Results from scipy.stats.chi2_contingency.
-    """
-
-    # Compute distances
-    distances_x = cdist(x_samples, refs, metric='euclidean')
-    distances_y = cdist(y_samples, refs, metric='euclidean')
-    
-    # Nearest references
-    idx_x = np.argmin(distances_x, axis=1)
-    idx_y = np.argmin(distances_y, axis=1)
-    
-    # Counts
-    counts_x = np.bincount(idx_x, minlength=current_num_refs)
-    counts_y = np.bincount(idx_y, minlength=current_num_refs)
-    
-    # Remove references with no counts
-    C = (counts_x > 0) | (counts_y > 0)
-    counts_x = counts_x[C]
-    counts_y = counts_y[C]
-    
-    n_filled_bins = np.sum(C)
-    if n_filled_bins == 1:
-        raise ValueError(
-            """
-            Only one Voronoi cell has samples, so chi^2 cannot 
-            be computed. This is likely due to a small number 
-            of samples or a pathological distribution. If possible, 
-            increase the number of x_samples and y_samples.
-            """
-        )
-    if n_filled_bins < (num_refs // 2):
-        warnings.warn(
-            """
-            Less than half of the Voronoi cells have any samples in them.
-            Possibly due to a small number of samples or a pathological
-            distribution. Result may be unreliable. If possible, increase the
-            number of x_samples and y_samples.
-            """
-        )
-    
-    # Perform chi-squared test using SciPy
-    contingency_table = np.stack([counts_x, counts_y])
-    return chi2_contingency(contingency_table)
-
-def _sample_reference_indices_torch(Nx, nx, Ny, ny, Ng, x_samples, y_samples, device):
-    """
-    Helper function to sample references for GPU-based Torch computations.
-
-    Parameters
-    ----------
-    Nx : int
-        Number of references to sample from x_samples.
-    nx : int
-        Number of samples in x_samples.
-    Ny : int
-        Number of references to sample from y_samples.
-    ny : int
-        Number of samples in y_samples.
-    Ng : int
-        Number of references to sample from a Gaussian distribution.
-
-    Returns
-    -------
-    np.ndarray  
-        References samples.
-    """
-    
-    if Nx > nx:
-        raise ValueError("Cannot sample more references from x_samples than available")
-    if Ny > ny:
-        raise ValueError("Cannot sample more references from y_samples than available")
-    
-    # Reference samples from x_samples
-    x_indices = torch.randperm(nx, device=device)
-    xrefs_indices = x_indices[:Nx]
-    x_samples_indices = x_indices[Nx:]
-    xrefs = x_samples[xrefs_indices]
-    x_samples = x_samples[x_samples_indices]
-    
-    # Reference samples from y_samples
-    y_indices = torch.randperm(ny, device=device)
-    yrefs_indices = y_indices[:Ny]
-    y_samples_indices = y_indices[Ny:]
-    yrefs = y_samples[yrefs_indices]
-    y_samples = y_samples[y_samples_indices]
-    
-    # Combine references
-    refs = torch.cat([xrefs, yrefs], dim=0)
-    
-    # Gaussian references
-    if Ng > 0:
-        m, s = _mean_std(x_samples, y_samples)
-        # Ensure m and s have the correct shape
-        if m.dim() == 1:
-            m = m.unsqueeze(0)
-        if s.dim() == 1:
-            s = s.unsqueeze(0)
-        gauss_refs = torch.normal(
-            mean=m.repeat(Ng, 1),
-            std=s.repeat(Ng, 1),
-        )
-        refs = torch.cat([refs, gauss_refs], dim=0)
-    return refs
-    
-def _compute_distances_torch(x_samples, y_samples, refs, current_num_refs, num_refs):
-    """
-    Helper function to calculate distances for GPU-based Torch computations.
-
-    Parameters
-    ----------
-    x_samples : torch.Tensor
-        Samples from the first distribution. Must have shape (N, *D) N is the
-        number of x samples, and D is the dimensionality of the samples.
-    y_samples : torch.Tensor
-        Samples from the second distribution. Must have shape (M, *D) M is the
-        number of y samples, and D is the dimensionality of the samples.
-    refs : torch.Tensor
-        Reference samples. Must have shape (num_refs, *D) where D is the
-        dimensionality of the samples.
-    current_num_refs : int
-        Number of reference samples used in the test.
-    num_refs : int
-        Number of reference samples to use.
-
-    Returns
-    -------
-    tuple
-        Results from the PyTorch implementation of chi2_contingency.
-    """
-
-    # Compute distances and find nearest references
-    distances_x = torch.cdist(x_samples, refs)
-    distances_y = torch.cdist(y_samples, refs)
-
-    idx_x = distances_x.argmin(dim=1)
-    idx_y = distances_y.argmin(dim=1)
-
-    counts_x = torch.bincount(idx_x, minlength=current_num_refs)
-    counts_y = torch.bincount(idx_y, minlength=current_num_refs)
-    
-    # Remove references with no counts
-    C = (counts_x > 0) | (counts_y > 0)
-    counts_x = counts_x[C]
-    counts_y = counts_y[C]
-    
-    n_filled_bins = C.sum().item()
-    if n_filled_bins == 1:
-        raise ValueError(
-            """
-            Only one Voronoi cell has samples, so chi^2 cannot 
-            be computed. This is likely due to a small number 
-            of samples or a pathological distribution. If possible, 
-            increase the number of x_samples and y_samples.
-            """
-        )
-    if n_filled_bins < (num_refs // 2):
-        warnings.warn(
-            """
-            Less than half of the Voronoi cells have any samples in them.
-            Possibly due to a small number of samples or a pathological
-            distribution. Result may be unreliable. If possible, increase the
-            number of x_samples and y_samples.
-            """
-        )
-    
-    # Perform chi-squared test using the PyTorch implementation
-    chi2_stat, p_value, dof, expected = _chi2_contingency_torch(counts_x, counts_y)
-    return chi2_stat, p_value, dof, expected
 
 def _pqm_test(
     x_samples: Union[np.ndarray, torch.Tensor],
@@ -432,12 +84,9 @@ def _pqm_test(
     """
 
     # Determine if we're working with NumPy or PyTorch
-    is_numpy = isinstance(x_samples, np.ndarray) and isinstance(y_samples, np.ndarray)
     is_torch = isinstance(x_samples, torch.Tensor) and isinstance(y_samples, torch.Tensor)
-    
-    if not (is_numpy or is_torch):
-        raise TypeError("x_samples and y_samples must both be either NumPy arrays or PyTorch tensors.")
-    
+    assert type(x_samples) == type(y_samples), "x_samples and y_samples must be of the same type"
+
     # Validate sample sizes
     nx = x_samples.shape[0]
     ny = y_samples.shape[0]
@@ -450,63 +99,79 @@ def _pqm_test(
             "Number of samples is small (less than twice the number of reference samples). "
             "Result will have high variance and/or be non-discriminating."
         )
-    
+
     # Z-score normalization
     if z_score_norm:
-        mean, std = _mean_std(x_samples, y_samples)
+        if is_torch:
+            mean, std = _mean_std_torch(x_samples, y_samples)
+        else:
+            mean, std = _mean_std_numpy(x_samples, y_samples)
 
         x_samples = (x_samples - mean) / std
         y_samples = (y_samples - mean) / std
-    
+
     # Determine fraction of x_samples to use as reference samples
     if x_frac is None:
         x_frac = nx / (nx + ny)
-    
+
     # Determine number of samples from each distribution
-    if is_numpy:
-        counts = np.random.multinomial(
-            num_refs,
-            [x_frac * (1.0 - gauss_frac), (1.0 - x_frac) * (1.0 - gauss_frac), gauss_frac],
-        )
-        Nx, Ny, Ng = counts
-    elif is_torch:
-        probs = torch.tensor(
-            [
-                x_frac * (1.0 - gauss_frac),
-                (1.0 - x_frac) * (1.0 - gauss_frac),
-                gauss_frac,
-            ],
-            device=device,
-        )
-        counts_tensor = Multinomial(total_count=num_refs, probs=probs).sample()
-        counts = counts_tensor.round().long().cpu().numpy()
-        Nx, Ny, Ng = counts.tolist()
-    
+    counts = np.random.multinomial(
+        num_refs,
+        [x_frac * (1.0 - gauss_frac), (1.0 - x_frac) * (1.0 - gauss_frac), gauss_frac],
+    )
+    Nx, Ny, Ng = counts
+
     # Validate counts
     if Nx + Ny + Ng != num_refs:
         raise ValueError(
             f"Something went wrong. Nx={Nx}, Ny={Ny}, Ng={Ng} should sum to num_refs={num_refs}"
         )
-    
-    # Sampling reference indices
-    if is_numpy:
-        refs = _sample_reference_indices_numpy(Nx, nx, Ny, ny, Ng, x_samples, y_samples)
-    elif is_torch:
-        refs = _sample_reference_indices_torch(Nx, nx, Ny, ny, Ng, x_samples, y_samples, device)
-    
-    # Update num_refs in case Gaussian samples were added
-    current_num_refs = Nx + Ny + Ng
-    
-    # Compute nearest references and counts
-    if is_numpy:
-        return _compute_distances_numpy(x_samples, y_samples, refs, current_num_refs, num_refs)
-    
-    elif is_torch:
-        return _compute_distances_torch(x_samples, y_samples, refs, current_num_refs, num_refs)
+    if Nx > x_samples.shape[0]:
+        raise ValueError("Cannot sample more references from x_samples than available")
+    if Ny > y_samples.shape[0]:
+        raise ValueError("Cannot sample more references from y_samples than available")
+
+    # count samples in each voronoi bin
+    if is_torch:
+        refs = _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples, device)
+        counts_x, counts_y = _compute_counts_torch(x_samples, y_samples, refs, num_refs)
+    else:
+        refs = _sample_reference_indices_numpy(Nx, Ny, Ng, x_samples, y_samples)
+        counts_x, counts_y = _compute_counts_numpy(x_samples, y_samples, refs, num_refs)
+
+    # Remove references with no counts
+    C = (counts_x > 0) | (counts_y > 0)
+    counts_x = counts_x[C]
+    counts_y = counts_y[C]
+
+    n_filled_bins = C.sum().item()
+    if n_filled_bins == 1:
+        raise ValueError(
+            """
+            Only one Voronoi cell has samples, so chi^2 cannot 
+            be computed. This is likely due to a small number 
+            of samples or a pathological distribution. If possible, 
+            increase the number of x_samples and y_samples.
+            """
+        )
+    if n_filled_bins < (num_refs // 2):
+        warnings.warn(
+            """
+            Less than half of the Voronoi cells have any samples in them.
+            Possibly due to a small number of samples or a pathological
+            distribution. Result may be unreliable. If possible, increase the
+            number of x_samples and y_samples.
+            """
+        )
+
+    # Perform chi-squared test using SciPy
+    contingency_table = np.stack([counts_x, counts_y])
+    return chi2_contingency(contingency_table)
+
 
 def pqm_pvalue(
-    x_samples,
-    y_samples,
+    x_samples: Union[np.ndarray, torch.Tensor],
+    y_samples: Union[np.ndarray, torch.Tensor],
     num_refs: int = 100,
     re_tessellation: Optional[int] = None,
     z_score_norm: bool = False,
@@ -572,20 +237,6 @@ def pqm_pvalue(
         pvalue(s). Null hypothesis that both samples are drawn from the same
         distribution.
     """
-    # Check the device and convert to the respective type (Numpy or Torch) and call their respective _pqm_test function
-
-    if device.type == 'cpu' or device == 'cpu':
-        # Check if x_samples and y_samples are not already NumPy arrays
-        if not isinstance(x_samples, np.ndarray):
-            x_samples = x_samples.cpu().numpy()
-        if not isinstance(y_samples, np.ndarray):
-            y_samples = y_samples.cpu().numpy()
-    elif device.type == 'cuda' or device == 'cuda':
-        # Check if x_samples and y_samples are not already torch tensors
-        if not torch.is_tensor(x_samples):
-            x_samples = torch.tensor(x_samples, device=device)
-        if not torch.is_tensor(y_samples):
-            y_samples = torch.tensor(y_samples, device=device)
 
     if re_tessellation is not None:
         return [
@@ -600,17 +251,18 @@ def pqm_pvalue(
             )
             for _ in range(re_tessellation)
         ]
-    
+
     _, p_value, _, _ = _pqm_test(
         x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac, device
     )
-    
+
     # Return p-value as a float
-    return p_value if isinstance(p_value, float) else float(p_value)
+    return p_value
+
 
 def pqm_chi2(
-    x_samples,
-    y_samples,
+    x_samples: Union[np.ndarray, torch.Tensor],
+    y_samples: Union[np.ndarray, torch.Tensor],
     num_refs: int = 100,
     re_tessellation: Optional[int] = None,
     z_score_norm: bool = False,
@@ -686,20 +338,6 @@ def pqm_chi2(
         chi2 statistic(s).
     """
 
-    # Check the device and convert to the respective type (Numpy or Torch) and call their respective _pqm_test function
-    if device.type == 'cpu' or device == 'cpu':
-        # Check if x_samples and y_samples are not already NumPy arrays
-        if not isinstance(x_samples, np.ndarray):
-            x_samples = x_samples.cpu().numpy()
-        if not isinstance(y_samples, np.ndarray):
-            y_samples = y_samples.cpu().numpy()
-    elif device.type == 'cuda' or device == 'cuda':
-        # Check if x_samples and y_samples are not already torch tensors
-        if not torch.is_tensor(x_samples):
-            x_samples = torch.tensor(x_samples, device=device)
-        if not torch.is_tensor(y_samples):
-            y_samples = torch.tensor(y_samples, device=device)
-
     if re_tessellation is not None:
         return [
             pqm_chi2(
@@ -714,14 +352,13 @@ def pqm_chi2(
             for _ in range(re_tessellation)
         ]
 
-
     chi2_stat, _, dof, _ = _pqm_test(
         x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac, device
     )
 
     # Rescale chi2 statistic if necessary
     if dof != num_refs - 1:
-        chi2_stat = rescale_chi2(chi2_stat, dof, num_refs - 1, device)
+        chi2_stat = _rescale_chi2(chi2_stat, dof, num_refs - 1)
 
     # Return chi2_stat as a float
-    return chi2_stat.item() if isinstance(chi2_stat, torch.Tensor) else float(chi2_stat)
+    return chi2_stat

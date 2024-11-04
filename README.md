@@ -22,9 +22,11 @@ PQMass takes in $x$ and $y$ two datasets and determines if they come from the sa
 
 ![Headline plot showing an example tessellation for PQMass](media/Voronoi.png "")
 PQMass partitions the space by taking reference points from $x$ and $y$ and creating Voronoi tessellations around the reference points. On the left is an example of one such region, which we note follows a Binomial Distribution; the samples are either inside or outside the region. On the right is the entire space partitioned, allowing us to see that this is a multinomial distribution, a given sample can be in region P or any other region. This is crucial as it allows for two metrics to be defined that can be used to determine if $x$ and $y$ come from the same underlying distribution. The first is the $\chi_{PQM}^2$
+
 $$\chi_{PQM}^2 \equiv \sum_{i = 1}^{n_R} \left[ \frac{(k({\bf x}, R_i) - \hat{N}_{x, i})^2}{\hat{N}_{x, i}} + \frac{(k({\bf y}, R_i) - \hat{N}_{y, i})^2}{\hat{N}_{y, i}} \right]$$
 
 and the second is the $\text{p-value}(\chi_{PQM}^2)$
+
 $$\text{p-value}(\chi_{PQM}^2) \equiv \int_{-\infty}^{\chi^2_{\rm {PQM}}} \chi^2_{n_R - 1}(z) dz$$
 
 For $\chi_{PQM}^2$ metric, given your two sets of samples, if they come from the same

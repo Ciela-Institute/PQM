@@ -6,15 +6,13 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/pqm)
 [![arXiv](https://img.shields.io/badge/arXiv-2402.04355-b31b1b.svg)](https://arxiv.org/abs/2402.04355)
 
-<!-- Implementation of the PQMass two sample test from Lemos et al. 2024 [here](https://arxiv.org/abs/2402.04355) -->
-
-[PQMass](https://arxiv.org/abs/2402.04355) is a new sample-based method for evaluating the quality of generative models as well assessing distribution shifts.
+[PQMass](https://arxiv.org/abs/2402.04355) is a new sample-based method for evaluating the quality of generative models as well as assessing distribution shifts to determine if two datasets come from the same underlying distribution.
 
 ## Install
 
 To install PQMass, run the following:
 
-```python
+```bash
 pip install pqm
 ```
 
@@ -50,7 +48,7 @@ PQMass can work for any two datasets as it measures the distribution shift betwe
 
 ## Example
 
-We are using 100 regions. Thus, the DoF is 99, our expected $\chi^2$ peak of the distribution is 97, the median is 99, and the standard deviation should be 14.07. With this in mind, we set up our example. For the p-value, we expect to be between 0 and 1 and a significantly small p-value (e.g., $< 0.05$ or $< 0.01$) would mean we reject the null hypothesis and thus $x$ and $y$ do not come from the same distribution.
+We are using 100 regions. Thus, the DoF is 99, our expected $\chi^2$ peak of the distribution is 97, the mean is 99, and the standard deviation should be 14.07. With this in mind, we set up our example. For the p-value, we expect to be between 0 and 1 and a significantly small p-value (e.g., $< 0.05$ or $< 0.01$) would mean we reject the null hypothesis and thus $x$ and $y$ do not come from the same distribution.
 
 Our expected p-value should be around 0.5 to pass the null hypothesis test; any significant deviation away from this would indicate failure of the null hypothesis test.
 
@@ -95,6 +93,14 @@ print(np.mean(pvalues), np.std(pvalues)) # 3.53e-56, 8.436e-55
 Here it is clear that both $\chi_{PQM}^2$ and $\text{p-value}(\chi_{PQM}^2)$ are not close to their expected results, thus showing that $x$ and $y$ do $\textbf{not}$ come from the same underlying distribution.
 
 Thus, PQMass can be used to identify if any two distributions come from the same underlying distributions if enough samples are given. We encourage users to look through the paper to see the varying experiments and use cases for PQMass!
+
+## How to Intrept Result
+
+We have shown what to expect for PQMass when working with $\chi_{PQM}^2$ or $\text{p-value}(\chi_{PQM}^2)$ however when working with $\chi_{PQM}^2$, there is the case in which it will return 0's. There are a couple reasons in why this could happen
+
+- For Generative Models; 0's indicate memorization. Samples are duplicates of the data it has been trained on.
+- For non generative model scenario, it is typically due to lack of samples espically in high dimensions. Increasing samples should alleviate the issue.
+- Another scenario in which one could get 0's in a non generative model case is that it can also be an inidcator of duplicate samples in $x$ and $y$.
 
 ## Advanced Usage
 

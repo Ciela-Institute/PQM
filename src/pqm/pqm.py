@@ -348,7 +348,7 @@ def _pqm_test(
     z_score_norm: bool,
     x_frac: Optional[float],
     gauss_frac: float,
-    device: str = 'cpu',
+    device: str = torch.device("cpu"),
 ) -> Tuple:
     """
     Helper function to perform the PQM test and return the results from
@@ -490,7 +490,7 @@ def pqm_pvalue(
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
-    device: str = 'cpu',
+    device: str = torch.device("cpu"),
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -594,7 +594,7 @@ def pqm_chi2(
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
-    device: str = 'cpu',
+    device: str = torch.device("cpu"),
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`

@@ -34,8 +34,7 @@ peak of this distribution will be at `DoF - 2`, the mean will equal `DoF`, and
 the standard deviation will be `sqrt(2 * DoF)`. If your $\chi_{PQM}^2$ values are too
 high (`chi^2 / DoF > 1`), it suggests that the samples are out of distribution.
 Conversely, if the values are too low (`chi^2 / DoF < 1`), it indicates
-potential duplication of samples between `x` and `y` (i.e.
-memorization for generative models).
+potential duplication of samples between `x` and `y`.
 
 If your two samples are drawn from the same distribution, then the $\text{p-value}(\chi_{PQM}^2)$
 should be drawn from the random $\mathcal{U}(0,1)$ distribution. This means that if

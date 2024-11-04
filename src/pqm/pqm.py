@@ -57,7 +57,7 @@ def rescale_chi2(chi2_stat, orig_dof, target_dof, device):
     """
     Rescale chi2 statistic using appropriate methods depending on the device.
     """        
-    if device.type == 'cuda':
+    if device.type == 'cuda' or device == 'cuda':
         # Move tensors to CPU and convert to NumPy
         chi2_stat_cpu = chi2_stat.cpu().item()  # Convert to float
         orig_dof_cpu = orig_dof.cpu().item()    # Convert to float
@@ -329,11 +329,12 @@ def _compute_distances_torch(x_samples, y_samples, refs, current_num_refs, num_r
 
     # Compute distances and find nearest references
     distances_x = torch.cdist(x_samples, refs)
-    idx_x = distances_x.argmin(dim=1)
-    counts_x = torch.bincount(idx_x, minlength=current_num_refs)
-    
     distances_y = torch.cdist(y_samples, refs)
+
+    idx_x = distances_x.argmin(dim=1)
     idx_y = distances_y.argmin(dim=1)
+
+    counts_x = torch.bincount(idx_x, minlength=current_num_refs)
     counts_y = torch.bincount(idx_y, minlength=current_num_refs)
     
     # Remove references with no counts
@@ -391,7 +392,7 @@ def _pqm_test(
         x_samples, y_samples, and/or a Gaussian distribution, see the note
         below.
     re_tessellation : Optional[int]
-        Number of times pqm_pvalue is called, re-tesselating the space. No
+        Number of times _pqm_test is called, re-tesselating the space. No
         re_tessellation if None (default).
     z_score_norm : bool
         If True, z_score_norm the samples by subtracting the mean and dividing by the
@@ -453,12 +454,9 @@ def _pqm_test(
     # Z-score normalization
     if z_score_norm:
         mean, std = _mean_std(x_samples, y_samples)
-        if is_numpy:
-            x_samples = (x_samples - mean) / std
-            y_samples = (y_samples - mean) / std
-        elif is_torch:
-            x_samples = (x_samples - mean) / std
-            y_samples = (y_samples - mean) / std
+
+        x_samples = (x_samples - mean) / std
+        y_samples = (y_samples - mean) / std
     
     # Determine fraction of x_samples to use as reference samples
     if x_frac is None:
@@ -497,7 +495,7 @@ def _pqm_test(
         refs = _sample_reference_indices_torch(Nx, nx, Ny, ny, Ng, x_samples, y_samples, device)
     
     # Update num_refs in case Gaussian samples were added
-    current_num_refs = refs.shape[0]
+    current_num_refs = Nx + Ny + Ng
     
     # Compute nearest references and counts
     if is_numpy:
@@ -576,13 +574,13 @@ def pqm_pvalue(
     """
     # Check the device and convert to the respective type (Numpy or Torch) and call their respective _pqm_test function
 
-    if device.type == 'cpu':
+    if device.type == 'cpu' or device == 'cpu':
         # Check if x_samples and y_samples are not already NumPy arrays
         if not isinstance(x_samples, np.ndarray):
             x_samples = x_samples.cpu().numpy()
         if not isinstance(y_samples, np.ndarray):
             y_samples = y_samples.cpu().numpy()
-    elif device.type == 'cuda':
+    elif device.type == 'cuda' or device == 'cuda':
         # Check if x_samples and y_samples are not already torch tensors
         if not torch.is_tensor(x_samples):
             x_samples = torch.tensor(x_samples, device=device)
@@ -689,13 +687,13 @@ def pqm_chi2(
     """
 
     # Check the device and convert to the respective type (Numpy or Torch) and call their respective _pqm_test function
-    if device.type == 'cpu':
+    if device.type == 'cpu' or device == 'cpu':
         # Check if x_samples and y_samples are not already NumPy arrays
         if not isinstance(x_samples, np.ndarray):
             x_samples = x_samples.cpu().numpy()
         if not isinstance(y_samples, np.ndarray):
             y_samples = y_samples.cpu().numpy()
-    elif device.type == 'cuda':
+    elif device.type == 'cuda' or device == 'cuda':
         # Check if x_samples and y_samples are not already torch tensors
         if not torch.is_tensor(x_samples):
             x_samples = torch.tensor(x_samples, device=device)

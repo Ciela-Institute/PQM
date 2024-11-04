@@ -11,23 +11,47 @@ __all__ = ("pqm_chi2", "pqm_pvalue")
 
 def _mean_std(sample1, sample2, dim=0):
     """Get the mean and std of two combined samples without actually combining them."""
-    n1 = sample1.shape[dim]
-    n2 = sample2.shape[dim]
-    # Get mean/std of combined sample
-    mx = torch.mean(sample1, dim=dim)
-    sx = torch.std(sample1, dim=dim, unbiased=True)
-    my = torch.mean(sample2, dim=dim)
-    sy = torch.std(sample2, dim=dim, unbiased=True)
-    m = (n1 * mx + n2 * my) / (n1 + n2)
-    s = torch.sqrt(
-        (
-            (n1 - 1) * (sx ** 2)
-            + (n2 - 1) * (sy ** 2)
-            + n1 * n2 * (mx - my) ** 2 / (n1 + n2)
+    # Check if both samples are PyTorch tensors
+    if isinstance(sample1, torch.Tensor) and isinstance(sample2, torch.Tensor):
+        n1 = sample1.shape[dim]
+        n2 = sample2.shape[dim]
+        
+        mx = torch.mean(sample1, dim=dim)
+        sx = torch.std(sample1, dim=dim, unbiased=True)
+        my = torch.mean(sample2, dim=dim)
+        sy = torch.std(sample2, dim=dim, unbiased=True)
+        
+        m = (n1 * mx + n2 * my) / (n1 + n2)
+        s = torch.sqrt(
+            (
+                (n1 - 1) * (sx ** 2)
+                + (n2 - 1) * (sy ** 2)
+                + n1 * n2 * (mx - my) ** 2 / (n1 + n2)
+            )
+            / (n1 + n2 - 1)
         )
-        / (n1 + n2 - 1)
-    )
-    return m, s
+        return m, s
+
+    # Check if both samples are NumPy arrays
+    elif isinstance(sample1, np.ndarray) and isinstance(sample2, np.ndarray):
+        n1 = sample1.shape[dim]
+        n2 = sample2.shape[dim]
+        
+        mx = np.mean(sample1, axis=dim)
+        sx = np.std(sample1, axis=dim, ddof=1)
+        my = np.mean(sample2, axis=dim)
+        sy = np.std(sample2, axis=dim, ddof=1)
+        
+        m = (n1 * mx + n2 * my) / (n1 + n2)
+        s = np.sqrt(
+            (
+                (n1 - 1) * (sx ** 2)
+                + (n2 - 1) * (sy ** 2)
+                + n1 * n2 * (mx - my) ** 2 / (n1 + n2)
+            )
+            / (n1 + n2 - 1)
+        )
+        return m, s
 
 def rescale_chi2(chi2_stat, orig_dof, target_dof, device):
     """

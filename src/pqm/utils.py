@@ -103,7 +103,7 @@ def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples, device):
         shaper = torch.ones(Ng, *x_samples.shape[1:], device=device)
         gauss_refs = torch.normal(mean=m * shaper, std=s)
         refs = torch.cat([refs, gauss_refs], dim=0)
-    return refs
+    return refs, x_samples, y_samples
 
 
 def _sample_reference_indices_numpy(Nx, Ny, Ng, x_samples, y_samples):
@@ -144,7 +144,7 @@ def _sample_reference_indices_numpy(Nx, Ny, Ng, x_samples, y_samples):
         gauss_refs = np.random.normal(loc=m, scale=s, size=(Ng,) + tuple(x_samples.shape[1:]))
         refs = np.concatenate([refs, gauss_refs], axis=0)
 
-    return refs
+    return refs, x_samples, y_samples
 
 
 def _compute_counts_torch(x_samples, y_samples, refs, num_refs):

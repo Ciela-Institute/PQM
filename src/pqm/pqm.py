@@ -84,8 +84,13 @@ def _pqm_test(
     """
 
     # Determine if we're working with NumPy or PyTorch
+    assert type(x_samples) == type(
+        y_samples
+    ), f"x_samples and y_samples must be of the same type, not {type(x_samples)} and {type(y_samples)}"
     is_torch = isinstance(x_samples, torch.Tensor) and isinstance(y_samples, torch.Tensor)
-    assert type(x_samples) == type(y_samples), "x_samples and y_samples must be of the same type"
+    if not is_torch:
+        x_samples = np.array(x_samples)
+        y_samples = np.array(y_samples)
 
     # Validate sample sizes
     nx = x_samples.shape[0]
@@ -126,17 +131,21 @@ def _pqm_test(
         raise ValueError(
             f"Something went wrong. Nx={Nx}, Ny={Ny}, Ng={Ng} should sum to num_refs={num_refs}"
         )
-    if Nx > x_samples.shape[0]:
+    if Nx >= x_samples.shape[0] - 2:
         raise ValueError("Cannot sample more references from x_samples than available")
-    if Ny > y_samples.shape[0]:
+    if Ny >= y_samples.shape[0] - 2:
         raise ValueError("Cannot sample more references from y_samples than available")
 
     # count samples in each voronoi bin
     if is_torch:
-        refs = _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples, device)
+        refs, x_samples, y_samples = _sample_reference_indices_torch(
+            Nx, Ny, Ng, x_samples, y_samples, device
+        )
         counts_x, counts_y = _compute_counts_torch(x_samples, y_samples, refs, num_refs)
     else:
-        refs = _sample_reference_indices_numpy(Nx, Ny, Ng, x_samples, y_samples)
+        refs, x_samples, y_samples = _sample_reference_indices_numpy(
+            Nx, Ny, Ng, x_samples, y_samples
+        )
         counts_x, counts_y = _compute_counts_numpy(x_samples, y_samples, refs, num_refs)
 
     # Remove references with no counts

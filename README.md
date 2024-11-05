@@ -4,6 +4,7 @@
 [![CI](https://github.com/Ciela-Institute/PQM/actions/workflows/ci.yml/badge.svg)](https://github.com/Ciela-Institute/PQM/actions/workflows/ci.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/pqm)
+[![codecov](https://codecov.io/gh/Ciela-Institute/PQM/graph/badge.svg?token=wbkUiRkYtg)](https://codecov.io/gh/Ciela-Institute/PQM)
 [![arXiv](https://img.shields.io/badge/arXiv-2402.04355-b31b1b.svg)](https://arxiv.org/abs/2402.04355)
 
 [PQMass](https://arxiv.org/abs/2402.04355) is a new sample-based method for evaluating the quality of generative models as well as assessing distribution shifts to determine if two datasets come from the same underlying distribution.

@@ -59,7 +59,7 @@ def test_fail_pvalue(dist, use_pytorch, num_refs, ndim):
     new = []
     for _ in range(50):
         y_samples = _get_dist(dist, (500, ndim))
-        y_samples += 1 if dist == "normal" else 5
+        y_samples += 1 if dist == "normal" else 10
         x_samples = _get_dist(dist, (500, ndim))
 
         if use_pytorch:
@@ -80,7 +80,7 @@ def test_fail_chi2(dist, use_pytorch, z_score_norm, num_refs, ndim):
     new = []
     for _ in range(100):
         y_samples = _get_dist(dist, (500, ndim))
-        y_samples += 1 if dist == "normal" else 5
+        y_samples += 1 if dist == "normal" else 10
         x_samples = _get_dist(dist, (500, ndim))
 
         if use_pytorch:

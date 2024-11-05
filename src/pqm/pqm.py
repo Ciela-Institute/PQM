@@ -89,8 +89,8 @@ def _pqm_test(
     ), f"x_samples and y_samples must be of the same type, not {type(x_samples)} and {type(y_samples)}"
     is_torch = isinstance(x_samples, torch.Tensor) and isinstance(y_samples, torch.Tensor)
     if not is_torch:
-        x_samples = np.array(x_samples)
-        y_samples = np.array(y_samples)
+        x_samples = np.asarray(x_samples)
+        y_samples = np.asarray(y_samples)
 
     # Validate sample sizes
     nx = x_samples.shape[0]

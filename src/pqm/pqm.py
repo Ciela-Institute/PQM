@@ -25,7 +25,6 @@ def _pqm_test(
     z_score_norm: bool,
     x_frac: Optional[float],
     gauss_frac: float,
-    device: str = torch.device("cpu"),
 ) -> Tuple:
     """
     Helper function to perform the PQM test and return the results from
@@ -61,8 +60,6 @@ def _pqm_test(
         determined from the combined x_samples/y_samples. This ensures full
         support of the reference samples if pathological behavior is expected.
         Default: 0.0 no gaussian samples.
-    device : str
-        Device to use for computation. Default: 'cpu'. If 'cuda' is selected,
 
     Note
     ----
@@ -139,7 +136,7 @@ def _pqm_test(
     # count samples in each voronoi bin
     if is_torch:
         refs, x_samples, y_samples = _sample_reference_indices_torch(
-            Nx, Ny, Ng, x_samples, y_samples, device
+            Nx, Ny, Ng, x_samples, y_samples
         )
         counts_x, counts_y = _compute_counts_torch(x_samples, y_samples, refs, num_refs)
     else:
@@ -186,7 +183,6 @@ def pqm_pvalue(
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
-    device: str = torch.device("cpu"),
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -223,8 +219,6 @@ def pqm_pvalue(
         determined from the combined x_samples/y_samples. This ensures full
         support of the reference samples if pathological behavior is expected.
         Default: 0.0 no gaussian samples.
-    device : str
-        Device to use for computation. Default: 'cpu'.
 
     Note
     ----
@@ -256,14 +250,11 @@ def pqm_pvalue(
                 z_score_norm=z_score_norm,
                 x_frac=x_frac,
                 gauss_frac=gauss_frac,
-                device=device,
             )
             for _ in range(re_tessellation)
         ]
 
-    _, p_value, _, _ = _pqm_test(
-        x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac, device
-    )
+    _, p_value, _, _ = _pqm_test(x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac)
 
     # Return p-value as a float
     return p_value
@@ -277,7 +268,6 @@ def pqm_chi2(
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
-    device: str = torch.device("cpu"),
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -314,8 +304,6 @@ def pqm_chi2(
         determined from the combined x_samples/y_samples. This ensures full
         support of the reference samples if pathological behavior is expected.
         Default: 0.0 no gaussian samples.
-    device : str
-        Device to use for computation. Default: 'cpu'.
 
     Note
     ----
@@ -356,13 +344,12 @@ def pqm_chi2(
                 z_score_norm=z_score_norm,
                 x_frac=x_frac,
                 gauss_frac=gauss_frac,
-                device=device,
             )
             for _ in range(re_tessellation)
         ]
 
     chi2_stat, _, dof, _ = _pqm_test(
-        x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac, device
+        x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac
     )
 
     # Rescale chi2 statistic if necessary

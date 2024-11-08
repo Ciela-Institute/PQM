@@ -64,7 +64,7 @@ def _rescale_chi2(chi2_stat, orig_dof, target_dof):
     return chi2_stat * target_dof / orig_dof
 
 
-def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples, device):
+def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples):
     """
     Helper function to sample references for GPU-based Torch computations.
 
@@ -84,12 +84,12 @@ def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples, device):
     """
 
     # Reference samples from x_samples
-    x_indices = torch.randperm(x_samples.shape[0], device=device)
+    x_indices = torch.randperm(x_samples.shape[0], device=x_samples.device)
     xrefs = x_samples[x_indices[:Nx]]
     x_samples = x_samples[x_indices[Nx:]]
 
     # Reference samples from y_samples
-    y_indices = torch.randperm(y_samples.shape[0], device=device)
+    y_indices = torch.randperm(y_samples.shape[0], device=x_samples.device)
     yrefs = y_samples[y_indices[:Ny]]
     y_samples = y_samples[y_indices[Ny:]]
 
@@ -100,7 +100,9 @@ def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples, device):
     if Ng > 0:
         m, s = _mean_std_torch(x_samples, y_samples)
         # Ensure m has the correct shape
-        shaper = torch.ones(Ng, *x_samples.shape[1:], device=device)
+        shaper = torch.ones(
+            Ng, *x_samples.shape[1:], device=x_samples.device, dtype=x_samples.dtype
+        )
         gauss_refs = torch.normal(mean=m * shaper, std=s)
         refs = torch.cat([refs, gauss_refs], dim=0)
     return refs, x_samples, y_samples

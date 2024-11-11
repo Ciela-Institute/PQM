@@ -149,7 +149,7 @@ pvalues = pqm_pvalue(p, q, re_tessellation = 1000, guass_frac = 1.0)
 
 ### GPU Compatibility
 
-PQMass now works on both CPU and GPU. All that is needed is to pass what device you are on via `device = 'cuda'` or `device = 'cpu'`
+PQMass now works on both CPU and GPU. All that is needed is to pass the `x_samples` and `y_samples` as a PyTorch Tensor on the appropriate device.
 
 ## Developing
 

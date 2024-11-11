@@ -172,7 +172,7 @@ def _pqm_test(
 
     # Perform chi-squared test using SciPy
     contingency_table = np.stack([counts_x, counts_y])
-    return chi2_contingency(contingency_table)
+    return chi2_contingency(contingency_table, correction=False)
 
 
 def pqm_pvalue(

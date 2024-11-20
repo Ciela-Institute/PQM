@@ -1,9 +1,11 @@
 from typing import Optional, Union, Tuple, Callable
 import warnings
+from functools import partial
 
 import torch
 import numpy as np
 from scipy.stats import chi2_contingency, chi2
+from tqdm import tqdm
 
 from .utils import (
     _mean_std_numpy,
@@ -12,6 +14,7 @@ from .utils import (
     _sample_reference_indices_torch,
     _compute_counts_numpy,
     _compute_counts_torch,
+    permute_test,
 )
 
 __all__ = ("pqm_chi2", "pqm_pvalue")
@@ -186,6 +189,7 @@ def pqm_pvalue(
     y_samples: Union[np.ndarray, torch.Tensor],
     num_refs: int = 100,
     re_tessellation: Optional[int] = None,
+    permute_tests: Optional[int] = None,
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
@@ -211,6 +215,10 @@ def pqm_pvalue(
     re_tessellation : Optional[int]
         Number of times _pqm_test is called, re-tesselating the space. No
         re_tessellation if None (default).
+    permute_tests : Optional[int]
+        Number of permutation tests to perform. If not None, will return a
+        pvalue, the pvalue on the original x/y data, and the pvalues on the
+        permuted data.
     z_score_norm : bool
         If True, z_score_norm the samples by subtracting the mean and dividing by the
         standard deviation. mean and std are calculated from the combined
@@ -254,7 +262,24 @@ def pqm_pvalue(
         distribution.
     """
 
-    if re_tessellation is not None:
+    if permute_tests is not None:
+        return permute_test(
+            partial(
+                pqm_pvalue,
+                num_refs=num_refs,
+                z_score_norm=z_score_norm,
+                x_frac=x_frac,
+                gauss_frac=gauss_frac,
+                kernel=kernel,
+            ),
+            x_samples,
+            y_samples,
+            n_permute=permute_tests,
+            n_rerun=re_tessellation if re_tessellation is not None else 100,
+            measure=np.median,
+            bigger_bad=False,
+        )
+    elif re_tessellation is not None:
         return [
             pqm_pvalue(
                 x_samples,
@@ -265,7 +290,7 @@ def pqm_pvalue(
                 gauss_frac=gauss_frac,
                 kernel=kernel,
             )
-            for _ in range(re_tessellation)
+            for _ in tqdm(range(re_tessellation))
         ]
 
     _, p_value, _, _ = _pqm_test(
@@ -281,6 +306,7 @@ def pqm_chi2(
     y_samples: Union[np.ndarray, torch.Tensor],
     num_refs: int = 100,
     re_tessellation: Optional[int] = None,
+    permute_tests: Optional[int] = None,
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
@@ -306,9 +332,13 @@ def pqm_chi2(
     re_tessellation : Optional[int]
         Number of times _pqm_test is called, re-tesselating the space. No
         re_tessellation if None (default).
+    permute_tests : Optional[int]
+        Number of permutation tests to perform. If not None, will return a
+        pvalue, the chi2 on the original x/y data, and the chi2 values on the
+        permuted data.
     z_score_norm : bool
-        If True, z_score_norm the samples by subtracting the mean and dividing by the
-        standard deviation. mean and std are calculated from the combined
+        If True, z_score_norm the samples by subtracting the mean and dividing
+        by the standard deviation. mean and std are calculated from the combined
         x_samples and y_samples.
     x_frac : float
         Fraction of x_samples to use as reference samples. ``x_frac = 1`` will
@@ -358,7 +388,22 @@ def pqm_chi2(
         chi2 statistic(s).
     """
 
-    if re_tessellation is not None:
+    if permute_tests is not None:
+        return permute_test(
+            partial(
+                pqm_chi2,
+                num_refs=num_refs,
+                z_score_norm=z_score_norm,
+                x_frac=x_frac,
+                gauss_frac=gauss_frac,
+                kernel=kernel,
+            ),
+            x_samples,
+            y_samples,
+            n_permute=permute_tests,
+            n_rerun=re_tessellation if re_tessellation is not None else 100,
+        )
+    elif re_tessellation is not None:
         return [
             pqm_chi2(
                 x_samples,
@@ -369,7 +414,7 @@ def pqm_chi2(
                 gauss_frac=gauss_frac,
                 kernel=kernel,
             )
-            for _ in range(re_tessellation)
+            for _ in tqdm(range(re_tessellation))
         ]
 
     _, p_value, _, _ = _pqm_test(

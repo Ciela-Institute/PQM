@@ -1,9 +1,9 @@
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Callable
 import warnings
 
 import torch
 import numpy as np
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, chi2
 
 from .utils import (
     _mean_std_numpy,
@@ -12,7 +12,6 @@ from .utils import (
     _sample_reference_indices_torch,
     _compute_counts_numpy,
     _compute_counts_torch,
-    _rescale_chi2,
 )
 
 __all__ = ("pqm_chi2", "pqm_pvalue")
@@ -25,6 +24,7 @@ def _pqm_test(
     z_score_norm: bool,
     x_frac: Optional[float],
     gauss_frac: float,
+    kernel: Union[str, Callable] = "euclidean",
 ) -> Tuple:
     """
     Helper function to perform the PQM test and return the results from
@@ -46,8 +46,8 @@ def _pqm_test(
         Number of times _pqm_test is called, re-tesselating the space. No
         re_tessellation if None (default).
     z_score_norm : bool
-        If True, z_score_norm the samples by subtracting the mean and dividing by the
-        standard deviation. mean and std are calculated from the combined
+        If True, z_score_norm the samples by subtracting the mean and dividing
+        by the standard deviation. mean and std are calculated from the combined
         x_samples and y_samples.
     x_frac : float
         Fraction of x_samples to use as reference samples. ``x_frac = 1`` will
@@ -60,6 +60,12 @@ def _pqm_test(
         determined from the combined x_samples/y_samples. This ensures full
         support of the reference samples if pathological behavior is expected.
         Default: 0.0 no gaussian samples.
+    kernel : str or callable
+        Kernel function to use for distance calculation. If a string, must be
+        one of 'euclidean', 'cityblock', 'cosine', 'chebyshev', 'canberra', or
+        'correlation' (see ``scipy.distance.cdist``). If a callable, must take
+        two vectors and return a scalar, should also be commutative. This only
+        works for numpy array inputs. Default: 'euclidean'.
 
     Note
     ----
@@ -143,7 +149,7 @@ def _pqm_test(
         refs, x_samples, y_samples = _sample_reference_indices_numpy(
             Nx, Ny, Ng, x_samples, y_samples
         )
-        counts_x, counts_y = _compute_counts_numpy(x_samples, y_samples, refs, num_refs)
+        counts_x, counts_y = _compute_counts_numpy(x_samples, y_samples, refs, num_refs, kernel)
 
     # Remove references with no counts
     C = (counts_x > 0) | (counts_y > 0)
@@ -183,6 +189,7 @@ def pqm_pvalue(
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
+    kernel: str = "euclidean",
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -219,6 +226,12 @@ def pqm_pvalue(
         determined from the combined x_samples/y_samples. This ensures full
         support of the reference samples if pathological behavior is expected.
         Default: 0.0 no gaussian samples.
+    kernel : str or callable
+        Kernel function to use for distance calculation. If a string, must be
+        one of 'euclidean', 'cityblock', 'cosine', 'chebyshev', 'canberra', or
+        'correlation' (see ``scipy.distance.cdist``). If a callable, must take
+        two vectors and return a scalar, should also be commutative. This only
+        works for numpy array inputs. Default: 'euclidean'.
 
     Note
     ----
@@ -250,11 +263,14 @@ def pqm_pvalue(
                 z_score_norm=z_score_norm,
                 x_frac=x_frac,
                 gauss_frac=gauss_frac,
+                kernel=kernel,
             )
             for _ in range(re_tessellation)
         ]
 
-    _, p_value, _, _ = _pqm_test(x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac)
+    _, p_value, _, _ = _pqm_test(
+        x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac, kernel
+    )
 
     # Return p-value as a float
     return p_value
@@ -268,6 +284,7 @@ def pqm_chi2(
     z_score_norm: bool = False,
     x_frac: Optional[float] = None,
     gauss_frac: float = 0.0,
+    kernel: str = "euclidean",
 ):
     """
     Perform the PQM test of the null hypothesis that `x_samples` and `y_samples`
@@ -304,6 +321,12 @@ def pqm_chi2(
         determined from the combined x_samples/y_samples. This ensures full
         support of the reference samples if pathological behavior is expected.
         Default: 0.0 no gaussian samples.
+    kernel : str or callable
+        Kernel function to use for distance calculation. If a string, must be
+        one of 'euclidean', 'cityblock', 'cosine', 'chebyshev', 'canberra', or
+        'correlation' (see ``scipy.distance.cdist``). If a callable, must take
+        two vectors and return a scalar, should also be commutative. This only
+        works for numpy array inputs. Default: 'euclidean'.
 
     Note
     ----
@@ -344,17 +367,16 @@ def pqm_chi2(
                 z_score_norm=z_score_norm,
                 x_frac=x_frac,
                 gauss_frac=gauss_frac,
+                kernel=kernel,
             )
             for _ in range(re_tessellation)
         ]
 
-    chi2_stat, _, dof, _ = _pqm_test(
-        x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac
+    _, p_value, _, _ = _pqm_test(
+        x_samples, y_samples, num_refs, z_score_norm, x_frac, gauss_frac, kernel
     )
 
-    # Rescale chi2 statistic if necessary
-    if dof != num_refs - 1:
-        chi2_stat = _rescale_chi2(chi2_stat, dof, num_refs - 1)
+    chi2_stat = chi2.isf(p_value, num_refs - 1)
 
     # Return chi2_stat as a float
     return chi2_stat

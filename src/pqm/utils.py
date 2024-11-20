@@ -2,16 +2,17 @@ import numpy as np
 import torch
 from scipy.stats import chi2
 from scipy.spatial.distance import cdist
+from tqdm import tqdm
 
 __all__ = (
     "_mean_std_torch",
     "_mean_std_numpy",
-    "_rescale_chi2",
     "_chi2_contingency_torch",
     "_sample_reference_indices_numpy",
     "_compute_counts_numpy",
     "_sample_reference_indices_torch",
     "_compute_counts_torch",
+    "permute_test",
 )
 
 
@@ -49,19 +50,6 @@ def _mean_std_numpy(sample1, sample2):
         / (n1 + n2 - 1)
     )
     return m, s
-
-
-def _rescale_chi2(chi2_stat, orig_dof, target_dof):
-    """
-    Rescale chi2 statistic using appropriate methods depending on the offset.
-    """
-
-    if chi2_stat / orig_dof < 10:
-        # Use cumulative probability method for better accuracy
-        cp = chi2.sf(chi2_stat, orig_dof)
-        return chi2.isf(cp, target_dof)
-    # Use simple scaling for large values
-    return chi2_stat * target_dof / orig_dof
 
 
 def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples):
@@ -149,7 +137,7 @@ def _sample_reference_indices_numpy(Nx, Ny, Ng, x_samples, y_samples):
     return refs, x_samples, y_samples
 
 
-def _compute_counts_torch(x_samples, y_samples, refs, num_refs):
+def _compute_counts_torch(x_samples, y_samples, refs, num_refs, p=2.0):
     """
     Helper function to calculate distances for GPU-based Torch computations.
 
@@ -176,8 +164,8 @@ def _compute_counts_torch(x_samples, y_samples, refs, num_refs):
     """
 
     # Compute distances and find nearest references
-    distances_x = torch.cdist(x_samples, refs)
-    distances_y = torch.cdist(y_samples, refs)
+    distances_x = torch.cdist(x_samples, refs, p=p)
+    distances_y = torch.cdist(y_samples, refs, p=p)
 
     idx_x = distances_x.argmin(dim=1)
     idx_y = distances_y.argmin(dim=1)
@@ -188,7 +176,7 @@ def _compute_counts_torch(x_samples, y_samples, refs, num_refs):
     return counts_x.cpu().numpy(), counts_y.cpu().numpy()
 
 
-def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
+def _compute_counts_numpy(x_samples, y_samples, refs, num_refs, kernel="euclidean"):
     """
     Helper function to calculate distances for CPU-based NumPy computations.
 
@@ -207,6 +195,8 @@ def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
         Number of reference samples used in the test.
     num_refs : int
         Number of reference samples to use.
+    kernel : str or callable
+        kernel function for distance calculations.
 
     Returns
     -------
@@ -215,8 +205,8 @@ def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
     """
 
     # Compute distances
-    distances_x = cdist(x_samples, refs, metric="euclidean")
-    distances_y = cdist(y_samples, refs, metric="euclidean")
+    distances_x = cdist(x_samples, refs, metric=kernel)
+    distances_y = cdist(y_samples, refs, metric=kernel)
 
     # Nearest references
     idx_x = np.argmin(distances_x, axis=1)
@@ -227,3 +217,66 @@ def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
     counts_y = np.bincount(idx_y, minlength=num_refs)
 
     return counts_x, counts_y
+
+
+def _random_permutation(x, y):
+    if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
+        R = torch.cat((x, y), dim=0)
+        R = R[torch.randperm(R.shape[0])]
+    elif isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+        R = np.concatenate((x, y), axis=0)
+        np.random.shuffle(R)
+    else:
+        raise ValueError("x and y must be of the same type and either np.ndarray or torch.Tensor.")
+    return R[: len(x)], R[len(x) :]
+
+
+def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean, bigger_bad=True):
+    """
+    Perform a permutation test. The test statistic is calculated by running the
+    function f on the data x and y. For `n_permute` trials, shuffle the x/y
+    samples and rerun the test. If the null hypothesis is true then the test
+    statistic must be randomly distributed among the permuted tests. The p-value
+    is calculated as the proportion of permuted test statistics that are greater
+    than the original test statistic.
+
+    Parameters
+    ----------
+    f : callable
+        Function to calculate the test statistic. Must accept two arguments, x
+        and y.
+    x : np.ndarray or torch.Tensor
+        Samples from the first distribution.
+    y : np.ndarray or torch.Tensor
+        Samples from the second distribution.
+    n_permute : int
+        Number of permutation tests to run.
+    n_rerun : int
+        Number of times to rerun the test statistic for each permutation.
+    measure : callable
+        Function to calculate the test statistic from the `f` results. Default
+        is np.mean.
+
+    Returns
+    -------
+    float
+        p-value.
+    float
+        Test statistic, on original x/y.
+    np.ndarray
+        Permuted test statistics.
+    """
+    # Base test
+    test_stat = measure(list(f(x, y) for _ in range(n_rerun)))
+
+    # Permute test
+    permute_stats = []
+    for _ in tqdm(range(n_permute)):
+        x, y = _random_permutation(x, y)
+        permute_stats.append(measure(list(f(x, y) for _ in range(n_rerun))))
+    permute_stats = np.array(permute_stats)
+
+    if bigger_bad:
+        return np.mean(permute_stats > test_stat), test_stat, permute_stats
+    else:
+        return np.mean(permute_stats < test_stat), test_stat, permute_stats

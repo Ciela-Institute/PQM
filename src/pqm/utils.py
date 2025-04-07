@@ -6,7 +6,6 @@ from scipy.spatial.distance import cdist
 __all__ = (
     "_mean_std_torch",
     "_mean_std_numpy",
-    "_rescale_chi2",
     "_chi2_contingency_torch",
     "_sample_reference_indices_numpy",
     "_compute_counts_numpy",
@@ -49,19 +48,6 @@ def _mean_std_numpy(sample1, sample2):
         / (n1 + n2 - 1)
     )
     return m, s
-
-
-def _rescale_chi2(chi2_stat, orig_dof, target_dof):
-    """
-    Rescale chi2 statistic using appropriate methods depending on the offset.
-    """
-
-    if chi2_stat / orig_dof < 10:
-        # Use cumulative probability method for better accuracy
-        cp = chi2.sf(chi2_stat, orig_dof)
-        return chi2.isf(cp, target_dof)
-    # Use simple scaling for large values
-    return chi2_stat * target_dof / orig_dof
 
 
 def _sample_reference_indices_torch(Nx, Ny, Ng, x_samples, y_samples):
@@ -149,7 +135,7 @@ def _sample_reference_indices_numpy(Nx, Ny, Ng, x_samples, y_samples):
     return refs, x_samples, y_samples
 
 
-def _compute_counts_torch(x_samples, y_samples, refs, num_refs):
+def _compute_counts_torch(x_samples, y_samples, refs, num_refs, p=2.0):
     """
     Helper function to calculate distances for GPU-based Torch computations.
 
@@ -176,8 +162,8 @@ def _compute_counts_torch(x_samples, y_samples, refs, num_refs):
     """
 
     # Compute distances and find nearest references
-    distances_x = torch.cdist(x_samples, refs)
-    distances_y = torch.cdist(y_samples, refs)
+    distances_x = torch.cdist(x_samples, refs, p=p)
+    distances_y = torch.cdist(y_samples, refs, p=p)
 
     idx_x = distances_x.argmin(dim=1)
     idx_y = distances_y.argmin(dim=1)
@@ -188,7 +174,7 @@ def _compute_counts_torch(x_samples, y_samples, refs, num_refs):
     return counts_x.cpu().numpy(), counts_y.cpu().numpy()
 
 
-def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
+def _compute_counts_numpy(x_samples, y_samples, refs, num_refs, kernel="euclidean"):
     """
     Helper function to calculate distances for CPU-based NumPy computations.
 
@@ -207,6 +193,8 @@ def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
         Number of reference samples used in the test.
     num_refs : int
         Number of reference samples to use.
+    kernel : str or callable
+        kernel function for distance calculations.
 
     Returns
     -------
@@ -215,8 +203,8 @@ def _compute_counts_numpy(x_samples, y_samples, refs, num_refs):
     """
 
     # Compute distances
-    distances_x = cdist(x_samples, refs, metric="euclidean")
-    distances_y = cdist(y_samples, refs, metric="euclidean")
+    distances_x = cdist(x_samples, refs, metric=kernel)
+    distances_y = cdist(y_samples, refs, metric=kernel)
 
     # Nearest references
     idx_x = np.argmin(distances_x, axis=1)

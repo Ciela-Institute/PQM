@@ -231,14 +231,12 @@ def _random_permutation(x, y):
     return R[: len(x)], R[len(x) :]
 
 
-def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean, bigger_bad=True):
+def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean):
     """
     Perform a permutation test. The test statistic is calculated by running the
     function f on the data x and y. For `n_permute` trials, shuffle the x/y
     samples and rerun the test. If the null hypothesis is true then the test
-    statistic must be randomly distributed among the permuted tests. The p-value
-    is calculated as the proportion of permuted test statistics that are greater
-    than the original test statistic.
+    statistic must be randomly distributed among the permuted tests.
 
     Parameters
     ----------
@@ -259,11 +257,9 @@ def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean, bigger_ba
 
     Returns
     -------
-    float
-        p-value.
-    float
+    measure output (likely float)
         Test statistic, on original x/y.
-    np.ndarray
+    List[measure output] (likely list of floats)
         Permuted test statistics.
     """
     # Base test
@@ -274,9 +270,5 @@ def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean, bigger_ba
     for _ in tqdm(range(n_permute)):
         x, y = _random_permutation(x, y)
         permute_stats.append(measure(list(f(x, y) for _ in range(n_rerun))))
-    permute_stats = np.array(permute_stats)
 
-    if bigger_bad:
-        return np.mean(permute_stats > test_stat), test_stat, permute_stats
-    else:
-        return np.mean(permute_stats < test_stat), test_stat, permute_stats
+    return test_stat, permute_stats

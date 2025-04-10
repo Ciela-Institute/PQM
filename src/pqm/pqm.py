@@ -276,8 +276,6 @@ def pqm_pvalue(
             y_samples,
             n_permute=permute_tests,
             n_rerun=re_tessellation if re_tessellation is not None else 100,
-            measure=np.median,
-            bigger_bad=False,
         )
     elif re_tessellation is not None:
         return [

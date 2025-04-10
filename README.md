@@ -9,6 +9,8 @@
 
 [PQMass](https://arxiv.org/abs/2402.04355) is a new sample-based method for evaluating the quality of generative models as well as assessing distribution shifts to determine if two datasets come from the same underlying distribution.
 
+Think of it like a multi-dimensional KS-test!
+
 ## Install
 
 To install PQMass, run the following:

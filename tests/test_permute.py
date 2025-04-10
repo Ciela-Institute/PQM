@@ -25,12 +25,14 @@ def test_permute_fail(dist, use_pytorch):
         x_samples = torch.tensor(x_samples)
         y_samples = torch.tensor(y_samples)
 
-    pval, base, permute = pqm_pvalue(x_samples, y_samples, permute_tests=32)
+    base, permute = pqm_pvalue(x_samples, y_samples, permute_tests=32)
+    pval = np.mean(np.array(permute) < base)
     assert pval < 5e-2
     assert np.all(np.isfinite(base))
     assert np.all(np.isfinite(permute))
 
-    pval, base, permute = pqm_chi2(x_samples, y_samples, permute_tests=32)
+    base, permute = pqm_chi2(x_samples, y_samples, permute_tests=32)
+    pval = np.mean(np.array(permute) > base)
     assert pval < 5e-2
     assert np.all(np.isfinite(base))
     assert np.all(np.isfinite(permute))

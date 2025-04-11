@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from scipy.stats import chi2
 from scipy.spatial.distance import cdist
+from tqdm import tqdm
 
 __all__ = (
     "_mean_std_torch",
@@ -11,6 +12,7 @@ __all__ = (
     "_compute_counts_numpy",
     "_sample_reference_indices_torch",
     "_compute_counts_torch",
+    "permute_test",
 )
 
 
@@ -215,3 +217,58 @@ def _compute_counts_numpy(x_samples, y_samples, refs, num_refs, kernel="euclidea
     counts_y = np.bincount(idx_y, minlength=num_refs)
 
     return counts_x, counts_y
+
+
+def _random_permutation(x, y):
+    if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
+        R = torch.cat((x, y), dim=0)
+        R = R[torch.randperm(R.shape[0])]
+    elif isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+        R = np.concatenate((x, y), axis=0)
+        np.random.shuffle(R)
+    else:
+        raise ValueError("x and y must be of the same type and either np.ndarray or torch.Tensor.")
+    return R[: len(x)], R[len(x) :]
+
+
+def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean):
+    """
+    Perform a permutation test. The test statistic is calculated by running the
+    function f on the data x and y. For `n_permute` trials, shuffle the x/y
+    samples and rerun the test. If the null hypothesis is true then the test
+    statistic must be randomly distributed among the permuted tests.
+
+    Parameters
+    ----------
+    f : callable
+        Function to calculate the test statistic. Must accept two arguments, x
+        and y.
+    x : np.ndarray or torch.Tensor
+        Samples from the first distribution.
+    y : np.ndarray or torch.Tensor
+        Samples from the second distribution.
+    n_permute : int
+        Number of permutation tests to run.
+    n_rerun : int
+        Number of times to rerun the test statistic for each permutation.
+    measure : callable
+        Function to calculate the test statistic from the `f` results. Default
+        is np.mean.
+
+    Returns
+    -------
+    measure output (likely float)
+        Test statistic, on original x/y.
+    List[measure output] (likely list of floats)
+        Permuted test statistics.
+    """
+    # Base test
+    test_stat = measure(list(f(x, y) for _ in range(n_rerun)))
+
+    # Permute test
+    permute_stats = []
+    for _ in tqdm(range(n_permute)):
+        x, y = _random_permutation(x, y)
+        permute_stats.append(measure(list(f(x, y) for _ in range(n_rerun))))
+
+    return test_stat, permute_stats

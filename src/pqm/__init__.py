@@ -1,4 +1,4 @@
-from .pqm import pqm_pvalue, pqm_chi2
+from .pqm import pqm
 from .test_gaussian import test
 
 try:
@@ -8,8 +8,7 @@ except ImportError:
 
 
 __all__ = (
-    "pqm_pvalue",
-    "pqm_chi2",
+    "pqm",
     "test",
     "__version__",
 )

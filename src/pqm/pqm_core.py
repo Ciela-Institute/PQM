@@ -244,9 +244,9 @@ def permute_retesselate_pqm_test(
 
 if __name__ == "__main__":
     # Example usage
-    x_samples = np.random.rand(256, 20)
-    y_samples = np.random.normal(size=(256, 20))
-    num_refs = 50
+    x_samples = np.random.rand(128, 2000)
+    y_samples = np.random.normal(size=(128, 2000))
+    num_refs = 100
     from time import time
 
     start = time()

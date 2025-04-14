@@ -6,7 +6,7 @@ from scipy.spatial.distance import cdist
 import torch
 from warnings import warn
 
-from utils import (
+from .utils import (
     _mean_std_numpy,
     _mean_std_torch,
     _sample_reference_indices_numpy,
@@ -245,7 +245,7 @@ def permute_retesselate_pqm_test(
 if __name__ == "__main__":
     # Example usage
     x_samples = np.random.rand(256, 20)
-    y_samples = np.random.rand(256, 20)
+    y_samples = np.random.normal(size=(256, 20))
     num_refs = 50
     from time import time
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
         y_samples,
         num_refs,
         re_tessellation=100,
-        permute_tests=1000,
+        permute_tests=100,
         z_score_norm=False,
         x_frac=None,
         kernel="euclidean",
@@ -269,7 +269,7 @@ if __name__ == "__main__":
         y_samples,
         num_refs,
         re_tessellation=100,
-        permute_tests=1000,
+        permute_tests=100,
         z_score_norm=False,
         x_frac=None,
         kernel="euclidean",

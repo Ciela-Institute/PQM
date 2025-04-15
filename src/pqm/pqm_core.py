@@ -6,7 +6,7 @@ from scipy.spatial.distance import cdist
 import torch
 from warnings import warn
 
-from utils import (
+from .utils import (
     _mean_std_numpy,
     _mean_std_torch,
     _sample_reference_indices_numpy,
@@ -63,7 +63,6 @@ def init_checks_pqm_test(
 
 
 def core_pqm_test(counts_x, counts_y):
-    print(counts_x, counts_y)
     C = (counts_x > 0) | (counts_y > 0)
     counts_x = counts_x[C]
     counts_y = counts_y[C]
@@ -187,6 +186,33 @@ def permute_retesselate_pqm_test_slow(
     return np.array(test_stat)
 
 
+def _tessellation_numpy(dmatrix, indices, num_refs, nx, p):
+    refs = np.random.choice(np.arange(dmatrix.shape[0]), size=num_refs, replace=False, p=p)
+    subx = np.delete(indices[:nx], refs[refs < nx])
+    idx = dmatrix[subx.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(axis=1)
+    counts_x = np.bincount(idx, minlength=num_refs)
+    suby = np.delete(indices[nx:], refs[refs >= nx] - nx)
+    idy = dmatrix[suby.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(axis=1)
+    counts_y = np.bincount(idy, minlength=num_refs)
+    return counts_x, counts_y
+
+
+def _tessellation_torch(dmatrix, indices, num_refs, nx, p):
+    refs = np.random.choice(np.arange(dmatrix.shape[0]), size=num_refs, replace=False, p=p)
+    refs = torch.tensor(refs, device=dmatrix.device, dtype=torch.int32)
+    subx = torch.ones_like(indices[:nx], device=dmatrix.device, dtype=torch.bool)
+    subx[refs[refs < nx]] = False
+    subx = indices[:nx][subx]
+    idx = dmatrix[subx.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(dim=1)
+    counts_x = torch.bincount(idx, minlength=num_refs)
+    suby = torch.ones_like(indices[nx:], device=dmatrix.device, dtype=torch.bool)
+    suby[refs[refs >= nx] - nx] = False
+    suby = indices[nx:][suby]
+    idy = dmatrix[suby.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(dim=1)
+    counts_y = torch.bincount(idy, minlength=num_refs)
+    return counts_x.cpu().numpy(), counts_y.cpu().numpy()
+
+
 def permute_retesselate_pqm_test(
     x_samples: Union[np.ndarray, torch.Tensor],
     y_samples: Union[np.ndarray, torch.Tensor],
@@ -208,25 +234,26 @@ def permute_retesselate_pqm_test(
     if is_torch:
         samples = torch.cat([x_samples, y_samples], dim=0)
         kernel = 2.0 if kernel == "euclidean" else kernel
-        dmatrix = torch.cdist(samples, samples, p=kernel).detach().cpu().numpy()
+        dmatrix = torch.cdist(samples, samples, p=kernel)
+        indices = torch.arange(dmatrix.shape[0], dtype=torch.int32)
     else:
         samples = np.concatenate([x_samples, y_samples], axis=0)
         dmatrix = cdist(samples, samples, metric=kernel)
-    indices = np.arange(dmatrix.shape[0], dtype=np.int32)
+        indices = np.arange(dmatrix.shape[0], dtype=np.int32)
 
     permute_stats = []
     for pt in range(permute_tests + 1):
         if pt > 0:
-            np.random.shuffle(indices)
+            if is_torch:
+                indices = indices[torch.randperm(indices.shape[0])]
+            else:
+                np.random.shuffle(indices)
         substats = []
         for _ in range(re_tessellation):
-            refs = np.random.choice(np.arange(dmatrix.shape[0]), size=num_refs, replace=False, p=p)
-            subx = np.delete(indices[:nx], refs[refs < nx])
-            idx = dmatrix[subx.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(axis=1)
-            counts_x = np.bincount(idx, minlength=num_refs)
-            suby = np.delete(indices[nx:], refs[refs >= nx] - nx)
-            idy = dmatrix[suby.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(axis=1)
-            counts_y = np.bincount(idy, minlength=num_refs)
+            if is_torch:
+                counts_x, counts_y = _tessellation_torch(dmatrix, indices, num_refs, nx, p)
+            else:
+                counts_x, counts_y = _tessellation_numpy(dmatrix, indices, num_refs, nx, p)
             p_value = core_pqm_test(counts_x, counts_y)
             if return_type == "p_value":
                 substats.append(p_value)
@@ -244,9 +271,9 @@ def permute_retesselate_pqm_test(
 
 if __name__ == "__main__":
     # Example usage
-    x_samples = np.random.rand(50, 256)
-    y_samples = np.random.normal(size=(1000, 256))
-    num_refs = 10
+    x_samples = np.random.rand(1000, 256)
+    y_samples = np.random.normal(size=(50, 256))
+    num_refs = 50
     from time import time
 
     start = time()

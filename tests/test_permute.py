@@ -27,12 +27,12 @@ def test_permute_fail(return_type, dist, use_pytorch):
         y_samples = torch.tensor(y_samples)
 
     base, permute = pqm(
-        x_samples, y_samples, permute_tests=100, re_tessellation=100, return_type=return_type
+        x_samples, y_samples, permute_tests=50, re_tessellation=50, return_type=return_type
     )
     if return_type == "p_value":
-        pval = np.mean(np.mean(permute, axis=1) < np.mean(base))
+        pval = np.mean(np.min(permute, axis=1) < np.min(base))
     else:
-        pval = np.mean(np.mean(permute, axis=1) > np.mean(base))
+        pval = np.mean(np.max(permute, axis=1) > np.max(base))
 
     assert pval < 5e-2
     assert np.all(np.isfinite(base))

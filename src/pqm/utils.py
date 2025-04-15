@@ -13,6 +13,7 @@ __all__ = (
     "_sample_reference_indices_torch",
     "_compute_counts_torch",
     "permute_test",
+    "max_test",
 )
 
 
@@ -291,17 +292,6 @@ def max_test(chi2_stats, dof):
     float
         p-value.
     """
-    max_p_value = np.max(1 - chi2.cdf(chi2_stats, dof))
+    max_p_value = chi2.cdf(np.max(chi2_stats), dof)
     p_value = 1 - (max_p_value) ** len(chi2_stats)
     return p_value
-
-
-if __name__ == "__main__":
-    c = chi2.ppf(np.random.uniform(size=10), df=49)
-    # c[0] = 100
-    import matplotlib.pyplot as plt
-
-    plt.plot(np.linspace(0, 100, 100), chi2.pdf(np.linspace(0, 100, 100), df=49))
-    plt.hist(c, bins=50, density=True)
-    plt.show()
-    print(c, max_test(c, 49))

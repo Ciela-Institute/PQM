@@ -6,7 +6,7 @@ from scipy.spatial.distance import cdist
 import torch
 from warnings import warn
 
-from .utils import (
+from utils import (
     _mean_std_numpy,
     _mean_std_torch,
     _sample_reference_indices_numpy,
@@ -63,6 +63,7 @@ def init_checks_pqm_test(
 
 
 def core_pqm_test(counts_x, counts_y):
+    print(counts_x, counts_y)
     C = (counts_x > 0) | (counts_y > 0)
     counts_x = counts_x[C]
     counts_y = counts_y[C]
@@ -203,7 +204,6 @@ def permute_retesselate_pqm_test(
     nx = x_samples.shape[0]
     ny = y_samples.shape[0]
     p = np.concatenate((x_frac * np.ones(nx) / nx, (1 - x_frac) * np.ones(ny) / ny), axis=0)
-    p /= p.sum()
 
     if is_torch:
         samples = torch.cat([x_samples, y_samples], dim=0)
@@ -222,10 +222,10 @@ def permute_retesselate_pqm_test(
         for _ in range(re_tessellation):
             refs = np.random.choice(np.arange(dmatrix.shape[0]), size=num_refs, replace=False, p=p)
             subx = np.delete(indices[:nx], refs[refs < nx])
-            idx = dmatrix[subx][:, indices[refs]].argmin(axis=1)
+            idx = dmatrix[subx.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(axis=1)
             counts_x = np.bincount(idx, minlength=num_refs)
             suby = np.delete(indices[nx:], refs[refs >= nx] - nx)
-            idy = dmatrix[suby][:, indices[refs]].argmin(axis=1)
+            idy = dmatrix[suby.reshape(-1, 1), indices[refs].reshape(1, -1)].argmin(axis=1)
             counts_y = np.bincount(idy, minlength=num_refs)
             p_value = core_pqm_test(counts_x, counts_y)
             if return_type == "p_value":
@@ -244,25 +244,11 @@ def permute_retesselate_pqm_test(
 
 if __name__ == "__main__":
     # Example usage
-    x_samples = np.random.rand(128, 2000)
-    y_samples = np.random.normal(size=(128, 2000))
-    num_refs = 100
+    x_samples = np.random.rand(50, 256)
+    y_samples = np.random.normal(size=(1000, 256))
+    num_refs = 10
     from time import time
 
-    start = time()
-    res = permute_retesselate_pqm_test(
-        x_samples,
-        y_samples,
-        num_refs,
-        re_tessellation=100,
-        permute_tests=100,
-        z_score_norm=False,
-        x_frac=None,
-        kernel="euclidean",
-        return_type="chi2",
-    )
-    print("pvalue:", np.mean(np.mean(res[1], axis=1) > np.mean(res[0])))
-    print("Time taken (fast):", time() - start)
     start = time()
     res = permute_retesselate_pqm_test_slow(
         x_samples,
@@ -277,3 +263,17 @@ if __name__ == "__main__":
     )
     print("pvalue:", np.mean(np.mean(res[1], axis=1) > np.mean(res[0])))
     print("Time taken (slow):", time() - start)
+    start = time()
+    res = permute_retesselate_pqm_test(
+        x_samples,
+        y_samples,
+        num_refs,
+        re_tessellation=100,
+        permute_tests=100,
+        z_score_norm=False,
+        x_frac=None,
+        kernel="euclidean",
+        return_type="chi2",
+    )
+    print("pvalue:", np.mean(np.mean(res[1], axis=1) > np.mean(res[0])))
+    print("Time taken (fast):", time() - start)

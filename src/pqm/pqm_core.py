@@ -235,7 +235,7 @@ def permute_retesselate_pqm_test(
         samples = torch.cat([x_samples, y_samples], dim=0)
         kernel = 2.0 if kernel == "euclidean" else kernel
         dmatrix = torch.cdist(samples, samples, p=kernel)
-        indices = torch.arange(dmatrix.shape[0], dtype=torch.int32)
+        indices = torch.arange(dmatrix.shape[0], dtype=torch.int32, device=dmatrix.device)
     else:
         samples = np.concatenate([x_samples, y_samples], axis=0)
         dmatrix = cdist(samples, samples, metric=kernel)
@@ -245,7 +245,7 @@ def permute_retesselate_pqm_test(
     for pt in range(permute_tests + 1):
         if pt > 0:
             if is_torch:
-                indices = indices[torch.randperm(indices.shape[0])]
+                indices = indices[torch.randperm(indices.shape[0], device=dmatrix.device)]
             else:
                 np.random.shuffle(indices)
         substats = []

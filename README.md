@@ -98,7 +98,7 @@ Here it is clear that both $\chi_{PQM}^2$ and $\text{p-value}(\chi_{PQM}^2)$ are
 
 Thus, PQMass can be used to identify if any two distributions come from the same underlying distributions if enough samples are given. We encourage users to look through the paper to see the varying experiments and use cases for PQMass!
 
-## How to Intrept Result
+## How to interpret the result
 
 We have shown what to expect for PQMass when working with $\chi_{PQM}^2$ or $\text{p-value}(\chi_{PQM}^2)$ however when working with $\chi_{PQM}^2$, there is the case in which it will return 0's. There are a couple reasons in why this could happen
 

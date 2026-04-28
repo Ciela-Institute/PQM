@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from scipy.stats import chi2
+from scipy.stats import chi2, beta
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
@@ -13,6 +13,7 @@ __all__ = (
     "_sample_reference_indices_torch",
     "_compute_counts_torch",
     "permute_test",
+    "max_test",
 )
 
 
@@ -272,3 +273,25 @@ def permute_test(f, x, y, n_permute=100, n_rerun=100, measure=np.mean):
         permute_stats.append(measure(list(f(x, y) for _ in range(n_rerun))))
 
     return test_stat, permute_stats
+
+
+def max_test(chi2_stats, dof):
+    """
+    Compute a p-value for the maximum of a set of chi2 values, under the
+    assumption they were drawn from a chi2_dof distribution.
+
+    Parameters
+    ----------
+    chi2_stats : np.ndarray
+        Test statistics.
+    dof : int
+        Degrees of freedom.
+
+    Returns
+    -------
+    float
+        p-value.
+    """
+    max_p_value = chi2.cdf(np.max(chi2_stats), dof)
+    p_value = 1 - (max_p_value) ** len(chi2_stats)
+    return p_value
